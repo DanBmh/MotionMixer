@@ -18,17 +18,11 @@ from utils.utils_mixer import delta_2_gt, euler_error, mpjpe_error
 
 def test_pretrained(model, args):
 
-    N = 0
-    eval_frame = [1, 3, 7, 9, 13, 17, 21, 24]
-
-    t_3d = np.zeros(len(eval_frame))
-
     t_3d_all = []
-
     model.eval()
-    accum_loss = 0
-    n_batches = 0  # number of batches for all the sequences
+    n_total = 0  # number of batches for all the sequences
     actions = define_actions(args.actions_to_consider)
+
     dim_used = np.array(
         [
             6,
@@ -112,7 +106,6 @@ def test_pretrained(model, args):
     idx_eval = 7
 
     for action in actions:
-        running_loss = 0
         n = 0
         dataset_test = H36M_Dataset(
             args.data_dir,
@@ -122,6 +115,7 @@ def test_pretrained(model, args):
             split=2,
             actions=[action],
         )
+        t_3d = np.zeros([args.output_n])
 
         test_loader = DataLoader(
             dataset_test,
@@ -166,36 +160,12 @@ def test_pretrained(model, args):
                         1, 0, 2
                     )
                     sequences_train_delta = sequences_all_delta[:, 0 : args.input_n, :]
+
                     sequences_predict = model(sequences_train_delta)
                     sequences_predict = delta_2_gt(
                         sequences_predict, sequences_train[:, -1, :]
                     )
                     loss = mpjpe_error(sequences_predict, sequences_gt)
-
-                    sequences_gt_3d = sequences_gt.reshape(
-                        sequences_gt.shape[0], sequences_gt.shape[1], -1, 3
-                    )
-                    sequences_predict_3d = sequences_predict.reshape(
-                        sequences_predict.shape[0], sequences_predict.shape[1], -1, 3
-                    )
-
-                    for k in np.arange(0, len(eval_frame)):
-                        j = eval_frame[k]
-                        t_3d[k] += (
-                            torch.mean(
-                                torch.norm(
-                                    sequences_gt_3d[:, j, :, :].contiguous().view(-1, 3)
-                                    - sequences_predict_3d[:, j, :, :]
-                                    .contiguous()
-                                    .view(-1, 3),
-                                    2,
-                                    1,
-                                )
-                            ).item()
-                            * n
-                        )
-
-                    N += n
 
                 else:
                     sequences_predict = model(sequences_train)
@@ -206,31 +176,27 @@ def test_pretrained(model, args):
                     :, :, index_to_equal
                 ]
 
-                all_joints_seq_gt[:, :, dim_used] = sequences_gt
-                all_joints_seq_gt[:, :, index_to_ignore] = all_joints_seq_gt[
-                    :, :, index_to_equal
-                ]
-
-                loss = mpjpe_error(
-                    all_joints_seq.view(-1, args.output_n, 32, 3),
-                    all_joints_seq_gt.view(-1, args.output_n, 32, 3),
+                loss = torch.sqrt(
+                    torch.sum(
+                        (
+                            all_joints_seq.view(batch_dim, -1, 32, 3)
+                            - all_joints_seq_gt.view(batch_dim, -1, 32, 3)
+                        )
+                        ** 2,
+                        dim=-1,
+                    )
                 )
+                loss = torch.sum(torch.mean(loss, dim=2), dim=0)
+                t_3d += loss.cpu().data.numpy()
 
-                running_loss += loss * batch_dim
-                accum_loss += loss * batch_dim
+        n_total += n
+        frame_losses = t_3d / n
+        t_3d_all.append(frame_losses)
+        print('Frame losses for action "{}" are:'.format(action), frame_losses)
 
-        print(
-            "loss at test subject for action : "
-            + str(action)
-            + " is: "
-            + str(running_loss / n)
-        )
-        n_batches += n
-
-        t_3d_all.append(t_3d[idx_eval] / N)
-
-    print("overall average loss in mm is: " + str(accum_loss / n_batches))
-    print("overall final loss in mm is: ", np.mean(t_3d_all))
+    avg_losses = np.mean(t_3d_all, axis=0)
+    print("Total samples:", n_total)
+    print("Averaged frame losses in mm are:", avg_losses)
 
 
 if __name__ == "__main__":
@@ -303,7 +269,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_path",
         type=str,
-        default="./checkpoints/h36m_3d_25frames_ckpt",
+        default="./checkpoints/h36m/h36_3d_25frames_ckpt",
         help="directory with the models checkpoints ",
     )
     parser.add_argument(
