@@ -1,26 +1,21 @@
 import argparse
-import os
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import torch.optim as optim
 from datasets.dataset_h36m import H36M_Dataset
-from datasets.dataset_h36m_ang import H36M_Dataset_Angle
 from mlp_mixer import MlpMixer
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm
 
 from utils.data_utils import define_actions
-from utils.utils_mixer import delta_2_gt, euler_error, mpjpe_error
+from utils.utils_mixer import delta_2_gt, mpjpe_error
 
 
 def test_pretrained(model, args):
 
+    n_total = 0  # number of batches for all the sequences
     t_3d_all = []
     model.eval()
-    n_total = 0  # number of batches for all the sequences
     actions = define_actions(args.actions_to_consider)
 
     dim_used = np.array(
@@ -103,10 +98,10 @@ def test_pretrained(model, args):
         (joint_equal * 3, joint_equal * 3 + 1, joint_equal * 3 + 2)
     )
 
-    idx_eval = 7
-
     for action in actions:
         n = 0
+        t_3d = np.zeros([args.output_n])
+
         dataset_test = H36M_Dataset(
             args.data_dir,
             args.input_n,
@@ -115,8 +110,6 @@ def test_pretrained(model, args):
             split=2,
             actions=[action],
         )
-        t_3d = np.zeros([args.output_n])
-
         test_loader = DataLoader(
             dataset_test,
             batch_size=args.batch_size_test,
@@ -124,7 +117,8 @@ def test_pretrained(model, args):
             num_workers=0,
             pin_memory=True,
         )
-        for cnt, batch in enumerate(test_loader):
+
+        for _, batch in enumerate(test_loader):
             with torch.no_grad():
 
                 batch = batch.to(args.device)
