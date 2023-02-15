@@ -3,9 +3,9 @@ import sys
 
 import numpy as np
 import torch
+import tqdm
 from matplotlib import pyplot as plt
 from mlp_mixer import MlpMixer
-from tqdm import tqdm
 
 from utils.utils_mixer import delta_2_gt
 
@@ -21,6 +21,9 @@ config = {
     "input_n": 10,
     "output_n": 25,
 }
+
+viz_action = ""
+# viz_action = "walking"
 
 # ==================================================================================================
 
@@ -40,6 +43,20 @@ def calc_delta(sequences_train, sequences_gt, args):
 # ==================================================================================================
 
 
+def prepare_sequences(batch, batch_size: int, split: str, device):
+    sequences = utils_pipeline.make_input_sequence(batch, split)
+
+    # Merge joints and coordinates to a single dimension
+    sequences = sequences.reshape([batch_size, sequences.shape[1], -1])
+
+    sequences = torch.from_numpy(sequences).to(device)
+
+    return sequences
+
+
+# ==================================================================================================
+
+
 def viz_joints_3d(sequences_predict, batch):
     batch = batch[0]
     vis_seq_pred = (
@@ -49,10 +66,7 @@ def viz_joints_3d(sequences_predict, batch):
         .reshape(sequences_predict.shape[0], sequences_predict.shape[1], -1, 3)
     )[0]
     utils_pipeline.visualize_pose_trajectories(
-        utils_pipeline.make_absolute_with_last_input(
-            np.array([cs["bodies_relative"][0] for cs in batch["input"]]),
-            batch,
-        ),
+        np.array([cs["bodies3D"][0] for cs in batch["input"]]),
         np.array([cs["bodies3D"][0] for cs in batch["target"]]),
         utils_pipeline.make_absolute_with_last_input(vis_seq_pred, batch),
         batch["joints"],
@@ -80,27 +94,21 @@ def run_test(model, args):
         nbatch = 1
 
         for action in dataset_test:
+
+            if viz_action != "" and viz_action != action:
+                continue
+            
             frame_losses = np.zeros([args.output_n])
             nitems = 0
 
-            for batch in tqdm(dataset_test[action]):
+            for batch in tqdm.tqdm(dataset_test[action]):
                 nitems += nbatch
 
                 if nbatch == 1:
                     batch = [batch]
-                batch = list(map(utils_pipeline.make_relative_to_last_input, batch))
 
-                sequences_train = utils_pipeline.make_input_sequence(batch, "input")
-                sequences_gt = utils_pipeline.make_input_sequence(batch, "target")
-
-                # Merge joints and coordinates to a single dimension
-                sequences_train = sequences_train.reshape(
-                    [nbatch, sequences_train.shape[1], -1]
-                )
-                sequences_gt = sequences_gt.reshape([nbatch, sequences_gt.shape[1], -1])
-
-                sequences_train = torch.from_numpy(sequences_train).to(device)
-                sequences_gt = torch.from_numpy(sequences_gt).to(device)
+                sequences_train = prepare_sequences(batch, nbatch, "input", device)
+                sequences_gt = prepare_sequences(batch, nbatch, "target", device)
 
                 if args.delta_x:
                     sequences_train_delta = calc_delta(
@@ -114,8 +122,8 @@ def run_test(model, args):
                 else:
                     sequences_predict = model(sequences_train)
 
-                # if action == "walking":
-                #     viz_joints_3d(sequences_predict, batch)
+                if viz_action != "":
+                    viz_joints_3d(sequences_predict, batch)
 
                 loss = torch.sqrt(
                     torch.sum(
@@ -207,7 +215,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_path",
         type=str,
-        default="./checkpoints/h36m/h36_3d_abs_25frames_ckpt",
+        default="./checkpoints/h36m/h36_3d_abs_25frames_ckpt3",
         help="directory with the models checkpoints ",
     )
     parser.add_argument(

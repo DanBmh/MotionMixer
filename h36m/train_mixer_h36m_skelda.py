@@ -5,9 +5,9 @@ import sys
 import numpy as np
 import torch
 import torch.optim as optim
+import tqdm
 from mlp_mixer import MlpMixer
 from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm
 
 from utils.utils_mixer import delta_2_gt, mpjpe_error
 
@@ -19,7 +19,7 @@ import utils_pipeline
 datapath_save_out = "/datasets/tmp/human36m/{}_forecast_samples.json"
 config = {
     "item_step": 2,
-    "window_step": 20,
+    "window_step": 2,
     "input_n": 10,
     "output_n": 25,
 }
@@ -43,7 +43,6 @@ def get_log_dir(out_dir):
 
 
 def calc_delta(sequences_train, sequences_gt, args):
-    # print(sequences_train.shape, sequences_gt.shape)
     sequences_all = torch.cat((sequences_train, sequences_gt), 1)
     sequences_all_delta = [sequences_all[:, 1, :] - sequences_all[:, 0, :]]
     for i in range(args.input_n + args.output_n - 1):
@@ -52,6 +51,20 @@ def calc_delta(sequences_train, sequences_gt, args):
     sequences_all_delta = torch.stack((sequences_all_delta)).permute(1, 0, 2)
     sequences_train_delta = sequences_all_delta[:, 0 : args.input_n, :]
     return sequences_train_delta
+
+
+# ==================================================================================================
+
+
+def prepare_sequences(batch, batch_size: int, split: str, device):
+    sequences = utils_pipeline.make_input_sequence(batch, split)
+
+    # Merge joints and coordinates to a single dimension
+    sequences = sequences.reshape([batch_size, sequences.shape[1], -1])
+
+    sequences = torch.from_numpy(sequences).to(device)
+
+    return sequences
 
 
 # ==================================================================================================
@@ -96,31 +109,17 @@ def run_train(model, model_name, args):
         label_gen_test = utils_pipeline.create_labels_generator(dataset_test, config)
 
         nbatch = args.batch_size
-        for batch in tqdm(
+        for batch in tqdm.tqdm(
             utils_pipeline.batch_iterate(label_gen_train, batch_size=nbatch),
             total=int(dlen_train / nbatch),
         ):
-            batch = list(map(utils_pipeline.make_relative_to_last_input, batch))
 
-            sequences_train = utils_pipeline.make_input_sequence(batch, "input")
-            sequences_gt = utils_pipeline.make_input_sequence(batch, "target")
-
-            # Merge joints and coordinates to a single dimension
-            sequences_train = sequences_train.reshape(
-                [nbatch, sequences_train.shape[1], -1]
-            )
-            sequences_gt = sequences_gt.reshape([nbatch, sequences_gt.shape[1], -1])
-
-            sequences_train = torch.from_numpy(sequences_train).to(device)
-            sequences_gt = torch.from_numpy(sequences_gt).to(device)
+            sequences_train = prepare_sequences(batch, nbatch, "input", device)
+            sequences_gt = prepare_sequences(batch, nbatch, "target", device)
             optimizer.zero_grad()
 
             if args.delta_x:
-                # print("STS:", sequences_train.shape)
-                # print("SGS:", sequences_gt.shape)
                 sequences_train_delta = calc_delta(sequences_train, sequences_gt, args)
-                # print("STDS:", sequences_train_delta.shape)
-                # exit()
                 sequences_predict = model(sequences_train_delta)
                 sequences_predict = delta_2_gt(
                     sequences_predict, sequences_train[:, -1, :]
@@ -137,7 +136,9 @@ def run_train(model, model_name, args):
 
             optimizer.step()
             running_loss += loss * nbatch
-        train_loss.append(running_loss.detach().cpu() / len(dataset_train))
+        train_loss.append(
+            running_loss.detach().cpu() / (int(dlen_train / nbatch) * nbatch)
+        )
 
         if args.use_scheduler:
             scheduler.step()
@@ -169,15 +170,14 @@ def run_eval(model, dataset_gen_eval, dlen_eval, args):
     with torch.no_grad():
         running_loss = 0
 
-        nbatch = args.batch_size
-        for batch in tqdm(
+        nbatch = args.batch_size_test
+        for batch in tqdm.tqdm(
             utils_pipeline.batch_iterate(dataset_gen_eval, batch_size=nbatch),
             total=int(dlen_eval / nbatch),
         ):
-            batch = list(map(utils_pipeline.make_relative_to_last_input, batch))
 
-            sequences_train = utils_pipeline.make_input_sequence(batch, nbatch, "input")
-            sequences_gt = utils_pipeline.make_input_sequence(batch, nbatch, "target")
+            sequences_train = utils_pipeline.make_input_sequence(batch, "input")
+            sequences_gt = utils_pipeline.make_input_sequence(batch, "target")
 
             # Merge joints and coordinates to a single dimension
             sequences_train = sequences_train.reshape(
@@ -201,7 +201,7 @@ def run_eval(model, dataset_gen_eval, dlen_eval, args):
             loss = mpjpe_error(sequences_predict, sequences_gt)
             running_loss += loss * nbatch
 
-        avg_loss = running_loss.detach().cpu() / dlen_eval
+        avg_loss = running_loss.detach().cpu() / (int(dlen_eval / nbatch) * nbatch)
         print("overall average loss in mm is: {:.3f}".format(avg_loss))
         return avg_loss
 
@@ -338,5 +338,5 @@ if __name__ == "__main__":
         + str(sum(p.numel() for p in model.parameters() if p.requires_grad))
     )
 
-    model_name = "h36_3d_abs_" + str(args.output_n) + "frames_ckpt"
+    model_name = "h36_3d_abs_" + str(args.output_n) + "frames_ckpt3"
     run_train(model, model_name, args)
