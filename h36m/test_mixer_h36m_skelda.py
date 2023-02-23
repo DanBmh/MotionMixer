@@ -129,75 +129,65 @@ def run_test(model, args):
     device = args.dev
     model.eval()
 
-    action_losses = []
-
     # Load preprocessed datasets
-    dataset_test, _ = utils_pipeline.load_dataset(datapath_save_out, "test", config)
+    dataset_test, dlen = utils_pipeline.load_dataset(datapath_save_out, "test", config)
     label_gen_test = utils_pipeline.create_labels_generator(dataset_test, config)
-    dataset_test = utils_pipeline.seperate_scenes(label_gen_test)
 
     stime = time.time()
+    frame_losses = np.zeros([args.output_n])
+    nitems = 0
+
     with torch.no_grad():
         nbatch = 1
 
-        for action in dataset_test:
+        for batch in tqdm.tqdm(label_gen_test, total=dlen):
 
-            if viz_action != "" and viz_action != action:
+            if nbatch == 1:
+                batch = [batch]
+
+            if viz_action != "" and viz_action != batch[0]["action"]:
                 continue
 
-            frame_losses = np.zeros([args.output_n])
-            nitems = 0
+            nitems += nbatch
 
-            for batch in tqdm.tqdm(dataset_test[action]):
-                nitems += nbatch
+            sequences_train = prepare_sequences(batch, nbatch, "input", device)
+            sequences_gt = prepare_sequences(batch, nbatch, "target", device)
 
-                if nbatch == 1:
-                    batch = [batch]
-
-                sequences_train = prepare_sequences(batch, nbatch, "input", device)
-                sequences_gt = prepare_sequences(batch, nbatch, "target", device)
-
-                if args.delta_x:
-                    sequences_train_delta = calc_delta(
-                        sequences_train, sequences_gt, args
-                    )
-                    sequences_predict = model(sequences_train_delta)
-                    sequences_predict = delta_2_gt(
-                        sequences_predict, sequences_train[:, -1, :]
-                    )
-
-                else:
-                    sequences_predict = model(sequences_train)
-
-                # # Uncomment this to run a test which only predicts the last known timestep
-                # seq_train_np = sequences_train.cpu().data.numpy()
-                # seq_train_np = seq_train_np.reshape(nbatch, -1, args.pose_dim // 3, 3)
-                # seq_pred_np = repeat_last_timestep(seq_train_np, args.output_n)
-                # seq_pred_np = seq_pred_np.reshape(nbatch, args.output_n, -1)
-                # sequences_predict = torch.from_numpy(seq_pred_np).float().to(device)
-
-                if viz_action != "":
-                    viz_joints_3d(sequences_predict, batch)
-
-                loss = torch.sqrt(
-                    torch.sum(
-                        (
-                            sequences_predict.view(nbatch, -1, args.pose_dim // 3, 3)
-                            - sequences_gt.view(nbatch, -1, args.pose_dim // 3, 3)
-                        )
-                        ** 2,
-                        dim=-1,
-                    )
+            if args.delta_x:
+                sequences_train_delta = calc_delta(sequences_train, sequences_gt, args)
+                sequences_predict = model(sequences_train_delta)
+                sequences_predict = delta_2_gt(
+                    sequences_predict, sequences_train[:, -1, :]
                 )
-                loss = torch.sum(torch.mean(loss, dim=2), dim=0)
-                frame_losses += loss.cpu().data.numpy()
 
-            frame_losses = frame_losses / nitems
-            action_losses.append(frame_losses)
-            print('Frame losses for action "{}" are:'.format(action), frame_losses)
+            else:
+                sequences_predict = model(sequences_train)
 
-        avg_losses = np.mean(action_losses, axis=0)
-        print("Averaged frame losses in mm are:", avg_losses)
+            # # Uncomment this to run a test which only predicts the last known timestep
+            # seq_train_np = sequences_train.cpu().data.numpy()
+            # seq_train_np = seq_train_np.reshape(nbatch, -1, args.pose_dim // 3, 3)
+            # seq_pred_np = repeat_last_timestep(seq_train_np, args.output_n)
+            # seq_pred_np = seq_pred_np.reshape(nbatch, args.output_n, -1)
+            # sequences_predict = torch.from_numpy(seq_pred_np).float().to(device)
+
+            if viz_action != "":
+                viz_joints_3d(sequences_predict, batch)
+
+            loss = torch.sqrt(
+                torch.sum(
+                    (
+                        sequences_predict.view(nbatch, -1, args.pose_dim // 3, 3)
+                        - sequences_gt.view(nbatch, -1, args.pose_dim // 3, 3)
+                    )
+                    ** 2,
+                    dim=-1,
+                )
+            )
+            loss = torch.sum(torch.mean(loss, dim=2), dim=0)
+            frame_losses += loss.cpu().data.numpy()
+
+    avg_losses = frame_losses / nitems
+    print("Averaged frame losses in mm are:", avg_losses)
 
     ftime = time.time()
     print("Testing took {} seconds".format(int(ftime - stime)))
