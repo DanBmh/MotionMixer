@@ -1,5 +1,6 @@
 import argparse
 import sys
+import time
 
 import numpy as np
 import torch
@@ -17,9 +18,37 @@ import utils_pipeline
 datapath_save_out = "/datasets/tmp/human36m/{}_forecast_samples.json"
 config = {
     "item_step": 2,
-    "window_step": 20,
-    "input_n": 10,
+    "window_step": 2,
+    "input_n": 50,
     "output_n": 25,
+    "select_joints": [
+        "hip_middle",
+        "hip_right",
+        "knee_right",
+        "ankle_right",
+        # "middlefoot_right",
+        # "forefoot_right",
+        "hip_left",
+        "knee_left",
+        "ankle_left",
+        # "middlefoot_left",
+        # "forefoot_left",
+        # "spine_upper",
+        # "neck",
+        "nose",
+        # "head",
+        "shoulder_left",
+        "elbow_left",
+        "wrist_left",
+        # "hand_left",
+        # "thumb_left",
+        "shoulder_right",
+        "elbow_right",
+        "wrist_right",
+        # "hand_right",
+        # "thumb_right",
+        "shoulder_middle",
+    ],
 }
 
 viz_action = ""
@@ -90,6 +119,7 @@ def run_test(model, args):
     label_gen_test = utils_pipeline.create_labels_generator(dataset_test, config)
     dataset_test = utils_pipeline.seperate_scenes(label_gen_test)
 
+    stime = time.time()
     with torch.no_grad():
         nbatch = 1
 
@@ -97,7 +127,7 @@ def run_test(model, args):
 
             if viz_action != "" and viz_action != action:
                 continue
-            
+
             frame_losses = np.zeros([args.output_n])
             nitems = 0
 
@@ -144,6 +174,9 @@ def run_test(model, args):
 
         avg_losses = np.mean(action_losses, axis=0)
         print("Averaged frame losses in mm are:", avg_losses)
+
+    ftime = time.time()
+    print("Testing took {} seconds".format(int(ftime - stime)))
 
 
 # ==================================================================================================
@@ -241,8 +274,7 @@ if __name__ == "__main__":
     parser.add_argument("--tokens_mlp_dim", default=20, type=int, required=False)
     parser.add_argument("--channels_mlp_dim", default=50, type=int, required=False)
     parser.add_argument("--regularization", default=0.1, type=float, required=False)
-    # parser.add_argument("--pose_dim", default=66, type=int, required=False)
-    parser.add_argument("--pose_dim", default=78, type=int, required=False)
+    parser.add_argument("--pose_dim", default=45, type=int, required=False)
     parser.add_argument(
         "--delta_x",
         type=bool,

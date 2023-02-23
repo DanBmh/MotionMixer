@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+import time
 
 import numpy as np
 import torch
@@ -20,8 +21,36 @@ datapath_save_out = "/datasets/tmp/human36m/{}_forecast_samples.json"
 config = {
     "item_step": 2,
     "window_step": 2,
-    "input_n": 10,
+    "input_n": 50,
     "output_n": 25,
+    "select_joints": [
+        "hip_middle",
+        "hip_right",
+        "knee_right",
+        "ankle_right",
+        # "middlefoot_right",
+        # "forefoot_right",
+        "hip_left",
+        "knee_left",
+        "ankle_left",
+        # "middlefoot_left",
+        # "forefoot_left",
+        # "spine_upper",
+        # "neck",
+        "nose",
+        # "head",
+        "shoulder_left",
+        "elbow_left",
+        "wrist_left",
+        # "hand_left",
+        # "thumb_left",
+        "shoulder_right",
+        "elbow_right",
+        "wrist_right",
+        # "hand_right",
+        # "thumb_right",
+        "shoulder_middle",
+    ],
 }
 
 # ==================================================================================================
@@ -56,20 +85,6 @@ def calc_delta(sequences_train, sequences_gt, args):
 # ==================================================================================================
 
 
-def prepare_sequences(batch, batch_size: int, split: str, device):
-    sequences = utils_pipeline.make_input_sequence(batch, split)
-
-    # Merge joints and coordinates to a single dimension
-    sequences = sequences.reshape([batch_size, sequences.shape[1], -1])
-
-    sequences = torch.from_numpy(sequences).to(device)
-
-    return sequences
-
-
-# ==================================================================================================
-
-
 def run_train(model, model_name, args):
 
     log_dir = get_log_dir(args.root)
@@ -92,9 +107,6 @@ def run_train(model, model_name, args):
     dataset_eval, dlen_eval = utils_pipeline.load_dataset(
         datapath_save_out, "eval", config
     )
-    dataset_test, dlen_test = utils_pipeline.load_dataset(
-        datapath_save_out, "test", config
-    )
 
     train_loss, val_loss, test_loss = [], [], []
     best_loss = np.inf
@@ -106,7 +118,6 @@ def run_train(model, model_name, args):
 
         label_gen_train = utils_pipeline.create_labels_generator(dataset_train, config)
         label_gen_eval = utils_pipeline.create_labels_generator(dataset_eval, config)
-        label_gen_test = utils_pipeline.create_labels_generator(dataset_test, config)
 
         nbatch = args.batch_size
         for batch in tqdm.tqdm(
@@ -114,8 +125,24 @@ def run_train(model, model_name, args):
             total=int(dlen_train / nbatch),
         ):
 
-            sequences_train = prepare_sequences(batch, nbatch, "input", device)
-            sequences_gt = prepare_sequences(batch, nbatch, "target", device)
+            sequences_train = utils_pipeline.make_input_sequence(batch, "input")
+            sequences_gt = utils_pipeline.make_input_sequence(batch, "target")
+
+            augment = True
+            if augment:
+                sequences_train, sequences_gt = utils_pipeline.apply_augmentations(
+                    sequences_train, sequences_gt
+                )
+
+            # Merge joints and coordinates to a single dimension
+            sequences_train = sequences_train.reshape(
+                [nbatch, sequences_train.shape[1], -1]
+            )
+            sequences_gt = sequences_gt.reshape([nbatch, sequences_gt.shape[1], -1])
+
+            sequences_train = torch.from_numpy(sequences_train).to(device)
+            sequences_gt = torch.from_numpy(sequences_gt).to(device)
+
             optimizer.zero_grad()
 
             if args.delta_x:
@@ -145,11 +172,9 @@ def run_train(model, model_name, args):
 
         eval_loss = run_eval(model, label_gen_eval, dlen_eval, args)
         val_loss.append(eval_loss)
-        test_loss.append(run_eval(model, label_gen_test, dlen_test, args))
 
         tb_writer.add_scalar("loss/train", train_loss[-1].item(), epoch)
         tb_writer.add_scalar("loss/val", val_loss[-1].item(), epoch)
-        tb_writer.add_scalar("loss/test", test_loss[-1].item(), epoch)
         torch.save(model.state_dict(), os.path.join(log_dir, "model.pt"))
 
         if eval_loss < best_loss:
@@ -301,8 +326,7 @@ if __name__ == "__main__":
     parser.add_argument("--tokens_mlp_dim", default=20, type=int, required=False)
     parser.add_argument("--channels_mlp_dim", default=50, type=int, required=False)
     parser.add_argument("--regularization", default=0.1, type=float, required=False)
-    # parser.add_argument("--pose_dim", default=66, type=int, required=False)
-    parser.add_argument("--pose_dim", default=78, type=int, required=False)
+    parser.add_argument("--pose_dim", default=45, type=int, required=False)
     parser.add_argument(
         "--delta_x",
         type=bool,
@@ -339,4 +363,9 @@ if __name__ == "__main__":
     )
 
     model_name = "h36_3d_abs_" + str(args.output_n) + "frames_ckpt3"
+
+    stime = time.time()
     run_train(model, model_name, args)
+
+    ftime = time.time()
+    print("Training took {} seconds".format(int(ftime - stime)))
