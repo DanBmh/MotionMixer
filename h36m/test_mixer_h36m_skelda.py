@@ -57,6 +57,23 @@ viz_action = ""
 # ==================================================================================================
 
 
+def repeat_last_timestep(input_array, num_future_timesteps):
+    nbatch, _, human_joints, _ = input_array.shape
+    future_timesteps = np.zeros((nbatch, num_future_timesteps, human_joints, 3))
+
+    for i in range(nbatch):
+        for j in range(human_joints):
+            for coord in range(3):
+                future_timesteps[i, :, j, coord] = (
+                    np.ones(num_future_timesteps) * input_array[i, -1, j, coord]
+                )
+
+    return future_timesteps
+
+
+# ==================================================================================================
+
+
 def calc_delta(sequences_train, sequences_gt, args):
     # print(sequences_train.shape, sequences_gt.shape)
     sequences_all = torch.cat((sequences_train, sequences_gt), 1)
@@ -151,6 +168,13 @@ def run_test(model, args):
 
                 else:
                     sequences_predict = model(sequences_train)
+
+                # # Uncomment this to run a test which only predicts the last known timestep
+                # seq_train_np = sequences_train.cpu().data.numpy()
+                # seq_train_np = seq_train_np.reshape(nbatch, -1, args.pose_dim // 3, 3)
+                # seq_pred_np = repeat_last_timestep(seq_train_np, args.output_n)
+                # seq_pred_np = seq_pred_np.reshape(nbatch, args.output_n, -1)
+                # sequences_predict = torch.from_numpy(seq_pred_np).float().to(device)
 
                 if viz_action != "":
                     viz_joints_3d(sequences_predict, batch)
