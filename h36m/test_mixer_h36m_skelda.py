@@ -149,7 +149,6 @@ def run_test(model, args):
                 continue
 
             nitems += nbatch
-
             sequences_train = prepare_sequences(batch, nbatch, "input", device)
             sequences_gt = prepare_sequences(batch, nbatch, "target", device)
 
@@ -262,7 +261,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_path",
         type=str,
-        default="./checkpoints/h36m/h36_3d_abs_25frames_ckpt3",
+        default="./checkpoints/h36m/h36_3d_abs_25frames_ckpt",
         help="directory with the models checkpoints ",
     )
     parser.add_argument(
@@ -283,6 +282,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--loss_type", type=str, default="mpjpe", choices=["mpjpe", "angle"]
     )
+    # parser.add_argument("--hidden_dim", default=512, type=int, required=False)
+    # parser.add_argument("--num_blocks", default=8, type=int, required=False)
+    # parser.add_argument("--tokens_mlp_dim", default=512, type=int, required=False)
+    # parser.add_argument("--channels_mlp_dim", default=512, type=int, required=False)
+    # parser.add_argument("--hidden_dim", default=100, type=int, required=False)
+    # parser.add_argument("--num_blocks", default=6, type=int, required=False)
+    # parser.add_argument("--tokens_mlp_dim", default=100, type=int, required=False)
+    # parser.add_argument("--channels_mlp_dim", default=100, type=int, required=False)
     parser.add_argument("--hidden_dim", default=50, type=int, required=False)
     parser.add_argument("--num_blocks", default=4, type=int, required=False)
     parser.add_argument("--tokens_mlp_dim", default=20, type=int, required=False)

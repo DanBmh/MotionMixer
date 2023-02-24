@@ -85,7 +85,7 @@ def calc_delta(sequences_train, sequences_gt, args):
 # ==================================================================================================
 
 
-def run_train(model, model_name, args):
+def run_train(model, model_path, args):
 
     log_dir = get_log_dir(args.root)
     tb_writer = SummaryWriter(log_dir=log_dir)
@@ -181,7 +181,7 @@ def run_train(model, model_name, args):
             best_loss = eval_loss
             print("New best validation loss: %f" % best_loss)
             print("Saving best model...")
-            torch.save(model.state_dict(), os.path.join(args.model_path, model_name))
+            torch.save(model.state_dict(), model_path)
 
 
 # ==================================================================================================
@@ -300,7 +300,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_path",
         type=str,
-        default="./checkpoints/h36m",
+        default="./checkpoints/h36m/h36_3d_abs_25frames_ckpt",
         help="directory with the models checkpoints ",
     )
     parser.add_argument(
@@ -321,6 +321,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--loss_type", type=str, default="mpjpe", choices=["mpjpe", "angle"]
     )
+    # parser.add_argument("--hidden_dim", default=512, type=int, required=False)
+    # parser.add_argument("--num_blocks", default=8, type=int, required=False)
+    # parser.add_argument("--tokens_mlp_dim", default=512, type=int, required=False)
+    # parser.add_argument("--channels_mlp_dim", default=512, type=int, required=False)
+    # parser.add_argument("--hidden_dim", default=100, type=int, required=False)
+    # parser.add_argument("--num_blocks", default=6, type=int, required=False)
+    # parser.add_argument("--tokens_mlp_dim", default=100, type=int, required=False)
+    # parser.add_argument("--channels_mlp_dim", default=100, type=int, required=False)
     parser.add_argument("--hidden_dim", default=50, type=int, required=False)
     parser.add_argument("--num_blocks", default=4, type=int, required=False)
     parser.add_argument("--tokens_mlp_dim", default=20, type=int, required=False)
@@ -362,10 +370,8 @@ if __name__ == "__main__":
         + str(sum(p.numel() for p in model.parameters() if p.requires_grad))
     )
 
-    model_name = "h36_3d_abs_" + str(args.output_n) + "frames_ckpt3"
-
     stime = time.time()
-    run_train(model, model_name, args)
+    run_train(model, args.model_path, args)
 
     ftime = time.time()
     print("Training took {} seconds".format(int(ftime - stime)))
