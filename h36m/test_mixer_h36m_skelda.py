@@ -51,8 +51,8 @@ config = {
     ],
 }
 
-viz_action = ""
-# viz_action = "walking"
+viz_action = -1
+# viz_action = 14
 
 # ==================================================================================================
 
@@ -125,8 +125,12 @@ def viz_joints_3d(sequences_predict, batch):
         np.array([cs["bodies3D"][0] for cs in batch["target"]]),
         utils_pipeline.make_absolute_with_last_input(vis_seq_pred, batch),
         batch["joints"],
-        {"room_size": [3200, 4800, 2000], "room_center": [0, 0, 1000]},
+        # {"room_size": [3200, 4800, 2000], "room_center": [0, 0, 1000]},
+        {},
     )
+
+    plt.grid(False)
+    plt.axis("off")
     plt.show()
 
 
@@ -154,7 +158,7 @@ def run_test(model, args):
             if nbatch == 1:
                 batch = [batch]
 
-            if viz_action != "" and viz_action != batch[0]["action"]:
+            if viz_action != -1 and viz_action != batch[0]["action"]:
                 continue
 
             nitems += nbatch
@@ -181,7 +185,7 @@ def run_test(model, args):
             # sequences_predict = torch.from_numpy(seq_pred_np).float().to(device)
             # sequences_predict = delta_2_gt(sequences_predict, sequences_train[:, -1, :])
 
-            if viz_action != "":
+            if viz_action != -1:
                 viz_joints_3d(sequences_predict, batch)
 
             loss = torch.sqrt(
