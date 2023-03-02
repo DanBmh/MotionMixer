@@ -17,12 +17,20 @@ import utils_pipeline
 
 # ==================================================================================================
 
-datapath_save_out = "/datasets/tmp/human36m/{}_forecast_samples.json"
+datamode = "gt-gt"
+
+# datapath_save_out = "/datasets/tmp/human36m/{}_forecast_samples.json"
+datapath_save_out = "/datasets/tmp/human36m/{}_forecast_kppspose.json"
 config = {
-    "item_step": 2,
+    # "item_step": 2,
+    "item_step": 5,
     "window_step": 2,
-    "input_n": 50,
-    "output_n": 25,
+    # "input_n": 50,
+    # "output_n": 25,
+    # "input_n": 20,
+    # "output_n": 10,
+    "input_n": 60,
+    "output_n": 30,
     "select_joints": [
         "hip_middle",
         "hip_right",
@@ -52,6 +60,54 @@ config = {
         "shoulder_middle",
     ],
 }
+
+# datapath_save_out = "/datasets/tmp/mocap/{}_forecast_samples.json"
+# config = {
+#     # "item_step": 2,
+#     "item_step": 3,
+#     "window_step": 2,
+#     # "input_n": 30,
+#     # "output_n": 15,
+#     # "input_n": 20,
+#     # "output_n": 10,
+#     "input_n": 60,
+#     "output_n": 30,
+#     "select_joints": [
+#         "hip_middle",
+#         # "spine_lower",
+#         "hip_right",
+#         "knee_right",
+#         "ankle_right",
+#         # "middlefoot_right",
+#         # "forefoot_right",
+#         "hip_left",
+#         "knee_left",
+#         "ankle_left",
+#         # "middlefoot_left",
+#         # "forefoot_left",
+#         # "spine2",
+#         # "spine3",
+#         # "spine_upper",
+#         # "neck",
+#         # "head_lower",
+#         "head_upper",
+#         "shoulder_right",
+#         "elbow_right",
+#         "wrist_right",
+#         # "hand_right1",
+#         # "hand_right2",
+#         # "hand_right3",
+#         # "hand_right4",
+#         "shoulder_left",
+#         "elbow_left",
+#         "wrist_left",
+#         # "hand_left1",
+#         # "hand_left2",
+#         # "hand_left3",
+#         # "hand_left4"
+#         "shoulder_middle",
+#     ],
+# }
 
 # ==================================================================================================
 
@@ -104,8 +160,9 @@ def run_train(model, model_path, args):
     dataset_train, dlen_train = utils_pipeline.load_dataset(
         datapath_save_out, "train", config
     )
+    esplit = "test" if "mocap" in datapath_save_out else "eval"
     dataset_eval, dlen_eval = utils_pipeline.load_dataset(
-        datapath_save_out, "eval", config
+        datapath_save_out, esplit, config
     )
 
     train_loss, val_loss, test_loss = [], [], []
@@ -125,8 +182,10 @@ def run_train(model, model_path, args):
             total=int(dlen_train / nbatch),
         ):
 
-            sequences_train = utils_pipeline.make_input_sequence(batch, "input")
-            sequences_gt = utils_pipeline.make_input_sequence(batch, "target")
+            sequences_train = utils_pipeline.make_input_sequence(
+                batch, "input", datamode
+            )
+            sequences_gt = utils_pipeline.make_input_sequence(batch, "target", datamode)
 
             augment = True
             if augment:
@@ -201,8 +260,10 @@ def run_eval(model, dataset_gen_eval, dlen_eval, args):
             total=int(dlen_eval / nbatch),
         ):
 
-            sequences_train = utils_pipeline.make_input_sequence(batch, "input")
-            sequences_gt = utils_pipeline.make_input_sequence(batch, "target")
+            sequences_train = utils_pipeline.make_input_sequence(
+                batch, "input", datamode
+            )
+            sequences_gt = utils_pipeline.make_input_sequence(batch, "target", datamode)
 
             # Merge joints and coordinates to a single dimension
             sequences_train = sequences_train.reshape(
@@ -304,6 +365,12 @@ if __name__ == "__main__":
         help="directory with the models checkpoints ",
     )
     parser.add_argument(
+        "--model_weights_path",
+        type=str,
+        default="",
+        help="directory with the model weights to copy",
+    )
+    parser.add_argument(
         "--actions_to_consider",
         default="all",
         help="Actions to visualize.Choose either all or a list of actions",
@@ -321,18 +388,18 @@ if __name__ == "__main__":
     parser.add_argument(
         "--loss_type", type=str, default="mpjpe", choices=["mpjpe", "angle"]
     )
-    # parser.add_argument("--hidden_dim", default=512, type=int, required=False)
-    # parser.add_argument("--num_blocks", default=8, type=int, required=False)
-    # parser.add_argument("--tokens_mlp_dim", default=512, type=int, required=False)
-    # parser.add_argument("--channels_mlp_dim", default=512, type=int, required=False)
+    parser.add_argument("--hidden_dim", default=512, type=int, required=False)
+    parser.add_argument("--num_blocks", default=8, type=int, required=False)
+    parser.add_argument("--tokens_mlp_dim", default=512, type=int, required=False)
+    parser.add_argument("--channels_mlp_dim", default=512, type=int, required=False)
     # parser.add_argument("--hidden_dim", default=100, type=int, required=False)
     # parser.add_argument("--num_blocks", default=6, type=int, required=False)
     # parser.add_argument("--tokens_mlp_dim", default=100, type=int, required=False)
     # parser.add_argument("--channels_mlp_dim", default=100, type=int, required=False)
-    parser.add_argument("--hidden_dim", default=50, type=int, required=False)
-    parser.add_argument("--num_blocks", default=4, type=int, required=False)
-    parser.add_argument("--tokens_mlp_dim", default=20, type=int, required=False)
-    parser.add_argument("--channels_mlp_dim", default=50, type=int, required=False)
+    # parser.add_argument("--hidden_dim", default=50, type=int, required=False)
+    # parser.add_argument("--num_blocks", default=4, type=int, required=False)
+    # parser.add_argument("--tokens_mlp_dim", default=20, type=int, required=False)
+    # parser.add_argument("--channels_mlp_dim", default=50, type=int, required=False)
     parser.add_argument("--regularization", default=0.1, type=float, required=False)
     parser.add_argument("--pose_dim", default=45, type=int, required=False)
     parser.add_argument(
@@ -369,6 +436,10 @@ if __name__ == "__main__":
         "total number of parameters of the network is: "
         + str(sum(p.numel() for p in model.parameters() if p.requires_grad))
     )
+
+    if args.model_weights_path != "":
+        print("Loading model weights from:", args.model_weights_path)
+        model.load_state_dict(torch.load(args.model_weights_path))
 
     stime = time.time()
     run_train(model, args.model_path, args)

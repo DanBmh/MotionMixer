@@ -15,12 +15,22 @@ import utils_pipeline
 
 # ==================================================================================================
 
-datapath_save_out = "/datasets/tmp/human36m/{}_forecast_samples.json"
+datamode = "pred-pred"
+jloss_timestep = 29
+
+# datapath_save_out = "/datasets/tmp/human36m/{}_forecast_samples.json"
+datapath_save_out = "/datasets/tmp/human36m/{}_forecast_kppspose.json"
 config = {
-    "item_step": 2,
+    # "item_step": 2,
+    "item_step": 5,
     "window_step": 2,
-    "input_n": 50,
-    "output_n": 25,
+    # "window_step": 50,
+    # "input_n": 50,
+    # "output_n": 25,
+    # "input_n": 20,
+    # "output_n": 10,
+    "input_n": 60,
+    "output_n": 30,
     "select_joints": [
         "hip_middle",
         "hip_right",
@@ -50,6 +60,54 @@ config = {
         "shoulder_middle",
     ],
 }
+
+# datapath_save_out = "/datasets/tmp/mocap/{}_forecast_samples.json"
+# config = {
+#     # "item_step": 2,
+#     "item_step": 3,
+#     "window_step": 2,
+#     # "input_n": 30,
+#     # "output_n": 15,
+#     # "input_n": 20,
+#     # "output_n": 10,
+#     "input_n": 60,
+#     "output_n": 30,
+#     "select_joints": [
+#         "hip_middle",
+#         # "spine_lower",
+#         "hip_right",
+#         "knee_right",
+#         "ankle_right",
+#         # "middlefoot_right",
+#         # "forefoot_right",
+#         "hip_left",
+#         "knee_left",
+#         "ankle_left",
+#         # "middlefoot_left",
+#         # "forefoot_left",
+#         # "spine2",
+#         # "spine3",
+#         # "spine_upper",
+#         # "neck",
+#         # "head_lower",
+#         "head_upper",
+#         "shoulder_right",
+#         "elbow_right",
+#         "wrist_right",
+#         # "hand_right1",
+#         # "hand_right2",
+#         # "hand_right3",
+#         # "hand_right4",
+#         "shoulder_left",
+#         "elbow_left",
+#         "wrist_left",
+#         # "hand_left1",
+#         # "hand_left2",
+#         # "hand_left3",
+#         # "hand_left4"
+#         "shoulder_middle",
+#     ],
+# }
 
 viz_action = -1
 # viz_action = 14
@@ -99,7 +157,7 @@ def calc_delta(sequences_train, sequences_gt, args):
 
 
 def prepare_sequences(batch, batch_size: int, split: str, device):
-    sequences = utils_pipeline.make_input_sequence(batch, split)
+    sequences = utils_pipeline.make_input_sequence(batch, split, datamode)
 
     # Merge joints and coordinates to a single dimension
     sequences = sequences.reshape([batch_size, sequences.shape[1], -1])
@@ -114,6 +172,8 @@ def prepare_sequences(batch, batch_size: int, split: str, device):
 
 def viz_joints_3d(sequences_predict, batch):
     batch = batch[0]
+    last_input_pose = batch["input"][-1]["bodies3D"][0]
+
     vis_seq_pred = (
         sequences_predict.cpu()
         .detach()
@@ -123,7 +183,7 @@ def viz_joints_3d(sequences_predict, batch):
     utils_pipeline.visualize_pose_trajectories(
         np.array([cs["bodies3D"][0] for cs in batch["input"]]),
         np.array([cs["bodies3D"][0] for cs in batch["target"]]),
-        utils_pipeline.make_absolute_with_last_input(vis_seq_pred, batch),
+        utils_pipeline.make_absolute_with_last_input(vis_seq_pred, last_input_pose),
         batch["joints"],
         # {"room_size": [3200, 4800, 2000], "room_center": [0, 0, 1000]},
         {},
@@ -148,6 +208,7 @@ def run_test(model, args):
 
     stime = time.time()
     frame_losses = np.zeros([args.output_n])
+    joint_losses = np.zeros([len(config["select_joints"])])
     nitems = 0
 
     with torch.no_grad():
@@ -198,11 +259,17 @@ def run_test(model, args):
                     dim=-1,
                 )
             )
-            loss = torch.sum(torch.mean(loss, dim=2), dim=0)
-            frame_losses += loss.cpu().data.numpy()
+            floss = torch.sum(torch.mean(loss, dim=2), dim=0)
+            jloss = torch.sum(loss[:, jloss_timestep, :], dim=0)
+            frame_losses += floss.cpu().data.numpy()
+            joint_losses += jloss.cpu().data.numpy()
 
     avg_losses = frame_losses / nitems
+    avg_jlosses = joint_losses / nitems
     print("Averaged frame losses in mm are:", avg_losses)
+    print(
+        "Averaged joint losses at timestep", jloss_timestep, "in mm are:", avg_jlosses
+    )
 
     ftime = time.time()
     print("Testing took {} seconds".format(int(ftime - stime)))
@@ -298,18 +365,18 @@ if __name__ == "__main__":
     parser.add_argument(
         "--loss_type", type=str, default="mpjpe", choices=["mpjpe", "angle"]
     )
-    # parser.add_argument("--hidden_dim", default=512, type=int, required=False)
-    # parser.add_argument("--num_blocks", default=8, type=int, required=False)
-    # parser.add_argument("--tokens_mlp_dim", default=512, type=int, required=False)
-    # parser.add_argument("--channels_mlp_dim", default=512, type=int, required=False)
+    parser.add_argument("--hidden_dim", default=512, type=int, required=False)
+    parser.add_argument("--num_blocks", default=8, type=int, required=False)
+    parser.add_argument("--tokens_mlp_dim", default=512, type=int, required=False)
+    parser.add_argument("--channels_mlp_dim", default=512, type=int, required=False)
     # parser.add_argument("--hidden_dim", default=100, type=int, required=False)
     # parser.add_argument("--num_blocks", default=6, type=int, required=False)
     # parser.add_argument("--tokens_mlp_dim", default=100, type=int, required=False)
     # parser.add_argument("--channels_mlp_dim", default=100, type=int, required=False)
-    parser.add_argument("--hidden_dim", default=50, type=int, required=False)
-    parser.add_argument("--num_blocks", default=4, type=int, required=False)
-    parser.add_argument("--tokens_mlp_dim", default=20, type=int, required=False)
-    parser.add_argument("--channels_mlp_dim", default=50, type=int, required=False)
+    # parser.add_argument("--hidden_dim", default=50, type=int, required=False)
+    # parser.add_argument("--num_blocks", default=4, type=int, required=False)
+    # parser.add_argument("--tokens_mlp_dim", default=20, type=int, required=False)
+    # parser.add_argument("--channels_mlp_dim", default=50, type=int, required=False)
     parser.add_argument("--regularization", default=0.1, type=float, required=False)
     parser.add_argument("--pose_dim", default=45, type=int, required=False)
     parser.add_argument(
