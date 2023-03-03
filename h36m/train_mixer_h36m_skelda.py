@@ -109,25 +109,6 @@ config = {
 #     ],
 # }
 
-limbs = [
-    ("shoulder_left", "shoulder_right"),
-    ("shoulder_left", "elbow_left"),
-    ("shoulder_right", "elbow_right"),
-    ("elbow_left", "wrist_left"),
-    ("elbow_right", "wrist_right"),
-    ("hip_middle", "shoulder_middle"),
-    ("hip_left", "hip_right"),
-    ("hip_left", "knee_left"),
-    ("hip_right", "knee_right"),
-    ("knee_left", "ankle_left"),
-    ("knee_right", "ankle_right"),
-]
-limb_ids = [
-    (config["select_joints"].index(s1), config["select_joints"].index(s2))
-    for (s1, s2) in limbs
-]
-limb_starts = [s1 for (s1, _) in limb_ids]
-limb_ends = [s2 for (_, s2) in limb_ids]
 
 # ==================================================================================================
 
@@ -156,27 +137,6 @@ def calc_delta(sequences_train, sequences_gt, args):
     sequences_all_delta = torch.stack((sequences_all_delta)).permute(1, 0, 2)
     sequences_train_delta = sequences_all_delta[:, 0 : args.input_n, :]
     return sequences_train_delta
-
-
-# ==================================================================================================
-
-
-def scale_error(sequences_predict, sequences_gt):
-    stshape = sequences_predict.shape
-    sgshape = sequences_gt.shape
-    sequences_predict = sequences_predict.reshape(stshape[0], stshape[1], -1, 3)
-    sequences_gt = sequences_gt.reshape(sgshape[0], sgshape[1], -1, 3)
-
-    # Calculate lengths of the limbs
-    lengths_gt = sequences_gt[:, :, limb_starts, :] - sequences_gt[:, :, limb_ends, :]
-    lengths_pd = (
-        sequences_predict[:, :, limb_starts, :] - sequences_predict[:, :, limb_ends, :]
-    )
-    lengths_gt = torch.sqrt(torch.sum(lengths_gt**2, -1))
-    lengths_pd = torch.sqrt(torch.sum(lengths_pd**2, -1))
-
-    error = 0.1 * torch.mean((lengths_pd - lengths_gt) ** 2)
-    return error
 
 
 # ==================================================================================================
@@ -256,7 +216,6 @@ def run_train(model, model_path, args):
                 sequences_predict = model(sequences_train)
 
             loss = mpjpe_error(sequences_predict, sequences_gt)
-            # loss += scale_error(sequences_predict, sequences_gt)
             loss.backward()
 
             if args.clip_grad is not None:
@@ -327,7 +286,6 @@ def run_eval(model, dataset_gen_eval, dlen_eval, args):
                 sequences_predict = model(sequences_train)
 
             loss = mpjpe_error(sequences_predict, sequences_gt)
-            # loss += scale_error(sequences_predict, sequences_gt)
             running_loss += loss * nbatch
 
         avg_loss = running_loss.detach().cpu() / (int(dlen_eval / nbatch) * nbatch)
