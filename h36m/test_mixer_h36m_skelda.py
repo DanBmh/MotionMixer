@@ -1,4 +1,5 @@
 import argparse
+import copy
 import sys
 import time
 
@@ -93,8 +94,8 @@ def calc_delta(sequences_train, sequences_gt, args):
 # ==================================================================================================
 
 
-def prepare_sequences(batch, batch_size: int, split: str, device):
-    sequences = utils_pipeline.make_input_sequence(batch, split, datamode)
+def prepare_sequences(batch, batch_size: int, split: str, device, dmode):
+    sequences = utils_pipeline.make_input_sequence(batch, split, dmode)
 
     # Merge joints and coordinates to a single dimension
     sequences = sequences.reshape([batch_size, sequences.shape[1], -1])
@@ -152,7 +153,9 @@ def run_test(model, args):
 
     stime = time.time()
     frame_losses = np.zeros([args.output_n])
+    # frame_losses = np.zeros([args.input_n])
     joint_losses = np.zeros([len(config["select_joints"])])
+    max_jlosses = np.zeros([len(config["select_joints"])])
     nitems = 0
 
     with torch.no_grad():
@@ -167,8 +170,14 @@ def run_test(model, args):
                 continue
 
             nitems += nbatch
-            sequences_train = prepare_sequences(batch, nbatch, "input", device)
-            sequences_gt = prepare_sequences(batch, nbatch, "target", device)
+            sequences_train = prepare_sequences(
+                batch, nbatch, "input", device, datamode
+            )
+            sequences_gt = prepare_sequences(batch, nbatch, "target", device, datamode)
+
+            # Use this to calculate input pose errors
+            # sequences_predict = prepare_sequences(batch, nbatch, "input", device, "pred-pred")
+            # sequences_gt = prepare_sequences(batch, nbatch, "input", device, "gt-gt")
 
             if args.delta_x:
                 sequences_train_delta = calc_delta(sequences_train, sequences_gt, args)
@@ -193,27 +202,49 @@ def run_test(model, args):
             if viz_action != -1:
                 viz_joints_3d(sequences_predict, batch)
 
-            loss = torch.sqrt(
-                torch.sum(
-                    (
-                        sequences_predict.view(nbatch, -1, args.pose_dim // 3, 3)
-                        - sequences_gt.view(nbatch, -1, args.pose_dim // 3, 3)
-                    )
-                    ** 2,
-                    dim=-1,
+            sequences_predict = sequences_predict.reshape(
+                nbatch, -1, args.pose_dim // 3, 3
+            )
+            sequences_gt = sequences_gt.reshape(nbatch, -1, args.pose_dim // 3, 3)
+
+            # Convert to absolute coordinates, which is important for the "pred-gt" error
+            # In mode "pred-pred" or "gt-gt" it hasn't any effect because the last_input_pose is the same,
+            # so no additional error is hidden by it.
+            if datamode == "pred-gt":
+                last_input_pose_gt = batch[0]["input"][-1]["bodies3D"][0]
+                last_input_pose_pred = batch[0]["input"][-1]["predictions"][0]
+                sequences_predict = sequences_predict.cpu().data.numpy()
+                sequences_gt = sequences_gt.cpu().data.numpy()
+                sequences_predict = utils_pipeline.make_absolute_with_last_input(
+                    sequences_predict, last_input_pose_pred
                 )
+                sequences_gt = utils_pipeline.make_absolute_with_last_input(
+                    sequences_gt, last_input_pose_gt
+                )
+                sequences_predict = (
+                    torch.from_numpy(sequences_predict).float().to(device)
+                )
+                sequences_gt = torch.from_numpy(sequences_gt).float().to(device)
+
+            loss = torch.sqrt(
+                torch.sum((sequences_predict - sequences_gt) ** 2, dim=-1)
             )
             floss = torch.sum(torch.mean(loss, dim=2), dim=0)
             jloss = torch.sum(loss[:, jloss_timestep, :], dim=0)
             frame_losses += floss.cpu().data.numpy()
             joint_losses += jloss.cpu().data.numpy()
+            max_jlosses = np.maximum(max_jlosses, jloss.cpu().data.numpy())
 
     avg_losses = frame_losses / nitems
     avg_jlosses = joint_losses / nitems
+    avg_jlosses = np.round(avg_jlosses).astype(int)
+    max_jlosses = np.round(max_jlosses).astype(int)
+    avg_losses = np.round(avg_losses, 1)
     print("Averaged frame losses in mm are:", avg_losses)
     print(
         "Averaged joint losses at timestep", jloss_timestep, "in mm are:", avg_jlosses
     )
+    print("Maximum joint losses at timestep", jloss_timestep, "in mm are:", max_jlosses)
 
     ftime = time.time()
     print("Testing took {} seconds".format(int(ftime - stime)))
