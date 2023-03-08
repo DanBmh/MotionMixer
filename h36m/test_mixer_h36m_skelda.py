@@ -21,7 +21,9 @@ jloss_timestep = 0
 
 config = {
     "item_step": 1,
+    # "item_step": 2,
     "window_step": 1,
+    # "window_step": 40,
     "select_joints": [
         "hip_middle",
         "hip_right",
@@ -42,6 +44,7 @@ config = {
 }
 
 dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose_10fps.json"
+# dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose.json"
 # dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose_4fps.json"
 # dataset_eval_test = "/datasets/preprocessed/mocap/{}_forecast_samples_10fps.json"
 # dataset_eval_test = "/datasets/preprocessed/mocap/{}_forecast_samples_4fps.json"
@@ -120,8 +123,11 @@ def viz_joints_3d(sequences_predict, batch):
     )[0]
     utils_pipeline.visualize_pose_trajectories(
         np.array([cs["bodies3D"][0] for cs in batch["input"]]),
-        np.array([cs["bodies3D"][0] for cs in batch["target"]]),
-        utils_pipeline.make_absolute_with_last_input(vis_seq_pred, last_input_pose),
+        # np.array([]),
+        np.array([cs["bodies3D"][0] for cs in batch["target"]])[::1],
+        utils_pipeline.make_absolute_with_last_input(vis_seq_pred, last_input_pose)[
+            ::1
+        ],
         batch["joints"],
         # {"room_size": [3200, 4800, 2000], "room_center": [0, 0, 1000]},
         {},
@@ -206,25 +212,6 @@ def run_test(model, args):
                 nbatch, -1, args.pose_dim // 3, 3
             )
             sequences_gt = sequences_gt.reshape(nbatch, -1, args.pose_dim // 3, 3)
-
-            # Convert to absolute coordinates, which is important for the "pred-gt" error
-            # In mode "pred-pred" or "gt-gt" it hasn't any effect because the last_input_pose is the same,
-            # so no additional error is hidden by it.
-            if datamode == "pred-gt":
-                last_input_pose_gt = batch[0]["input"][-1]["bodies3D"][0]
-                last_input_pose_pred = batch[0]["input"][-1]["predictions"][0]
-                sequences_predict = sequences_predict.cpu().data.numpy()
-                sequences_gt = sequences_gt.cpu().data.numpy()
-                sequences_predict = utils_pipeline.make_absolute_with_last_input(
-                    sequences_predict, last_input_pose_pred
-                )
-                sequences_gt = utils_pipeline.make_absolute_with_last_input(
-                    sequences_gt, last_input_pose_gt
-                )
-                sequences_predict = (
-                    torch.from_numpy(sequences_predict).float().to(device)
-                )
-                sequences_gt = torch.from_numpy(sequences_gt).float().to(device)
 
             loss = torch.sqrt(
                 torch.sum((sequences_predict - sequences_gt) ** 2, dim=-1)
