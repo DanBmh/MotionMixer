@@ -15,99 +15,36 @@ import utils_pipeline
 
 # ==================================================================================================
 
-datamode = "pred-pred"
-jloss_timestep = 29
+datamode = "pred-gt"
+jloss_timestep = 0
 
-# datapath_save_out = "/datasets/tmp/human36m/{}_forecast_samples.json"
-datapath_save_out = "/datasets/tmp/human36m/{}_forecast_kppspose.json"
 config = {
-    # "item_step": 2,
-    "item_step": 5,
-    "window_step": 2,
-    # "window_step": 50,
-    # "input_n": 50,
-    # "output_n": 25,
-    # "input_n": 20,
-    # "output_n": 10,
-    "input_n": 60,
-    "output_n": 30,
+    "item_step": 1,
+    "window_step": 1,
     "select_joints": [
         "hip_middle",
         "hip_right",
         "knee_right",
         "ankle_right",
-        # "middlefoot_right",
-        # "forefoot_right",
         "hip_left",
         "knee_left",
         "ankle_left",
-        # "middlefoot_left",
-        # "forefoot_left",
-        # "spine_upper",
-        # "neck",
         "nose",
-        # "head",
         "shoulder_left",
         "elbow_left",
         "wrist_left",
-        # "hand_left",
-        # "thumb_left",
         "shoulder_right",
         "elbow_right",
         "wrist_right",
-        # "hand_right",
-        # "thumb_right",
         "shoulder_middle",
     ],
 }
 
-# datapath_save_out = "/datasets/tmp/mocap/{}_forecast_samples.json"
-# config = {
-#     # "item_step": 2,
-#     "item_step": 3,
-#     "window_step": 2,
-#     # "input_n": 30,
-#     # "output_n": 15,
-#     # "input_n": 20,
-#     # "output_n": 10,
-#     "input_n": 60,
-#     "output_n": 30,
-#     "select_joints": [
-#         "hip_middle",
-#         # "spine_lower",
-#         "hip_right",
-#         "knee_right",
-#         "ankle_right",
-#         # "middlefoot_right",
-#         # "forefoot_right",
-#         "hip_left",
-#         "knee_left",
-#         "ankle_left",
-#         # "middlefoot_left",
-#         # "forefoot_left",
-#         # "spine2",
-#         # "spine3",
-#         # "spine_upper",
-#         # "neck",
-#         # "head_lower",
-#         "head_upper",
-#         "shoulder_right",
-#         "elbow_right",
-#         "wrist_right",
-#         # "hand_right1",
-#         # "hand_right2",
-#         # "hand_right3",
-#         # "hand_right4",
-#         "shoulder_left",
-#         "elbow_left",
-#         "wrist_left",
-#         # "hand_left1",
-#         # "hand_left2",
-#         # "hand_left3",
-#         # "hand_left4"
-#         "shoulder_middle",
-#     ],
-# }
+dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose_10fps.json"
+# dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose_4fps.json"
+# dataset_eval_test = "/datasets/preprocessed/mocap/{}_forecast_samples_10fps.json"
+# dataset_eval_test = "/datasets/preprocessed/mocap/{}_forecast_samples_4fps.json"
+dataset_eval_test = dataset_eval_test.format("test")
 
 viz_action = -1
 # viz_action = 14
@@ -202,8 +139,15 @@ def run_test(model, args):
     device = args.dev
     model.eval()
 
+    config["input_n"] = args.input_n
+    config["output_n"] = args.output_n
+
     # Load preprocessed datasets
-    dataset_test, dlen = utils_pipeline.load_dataset(datapath_save_out, "test", config)
+    cfg = copy.deepcopy(config)
+    if "mocap" in dataset_eval_test:
+        cfg["select_joints"][cfg["select_joints"].index("nose")] = "head_upper"
+    dataset_test, dlen = utils_pipeline.load_dataset(dataset_eval_test, "test", cfg)
+    dataset_test = dataset_test["sequences"]
     label_gen_test = utils_pipeline.create_labels_generator(dataset_test, config)
 
     stime = time.time()

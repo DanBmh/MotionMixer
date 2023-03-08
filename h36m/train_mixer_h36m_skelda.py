@@ -1,4 +1,5 @@
 import argparse
+import copy
 import os
 import sys
 import time
@@ -18,96 +19,53 @@ import utils_pipeline
 # ==================================================================================================
 
 datamode = "gt-gt"
+# datamode = "pred-pred"
 
-# datapath_save_out = "/datasets/tmp/human36m/{}_forecast_samples.json"
-datapath_save_out = "/datasets/tmp/human36m/{}_forecast_kppspose.json"
 config = {
-    # "item_step": 2,
-    "item_step": 5,
-    "window_step": 2,
-    # "input_n": 50,
-    # "output_n": 25,
-    # "input_n": 20,
-    # "output_n": 10,
-    "input_n": 60,
-    "output_n": 30,
+    "item_step": 1,
+    "window_step": 1,
     "select_joints": [
         "hip_middle",
         "hip_right",
         "knee_right",
         "ankle_right",
-        # "middlefoot_right",
-        # "forefoot_right",
         "hip_left",
         "knee_left",
         "ankle_left",
-        # "middlefoot_left",
-        # "forefoot_left",
-        # "spine_upper",
-        # "neck",
         "nose",
-        # "head",
         "shoulder_left",
         "elbow_left",
         "wrist_left",
-        # "hand_left",
-        # "thumb_left",
         "shoulder_right",
         "elbow_right",
         "wrist_right",
-        # "hand_right",
-        # "thumb_right",
         "shoulder_middle",
     ],
 }
 
-# datapath_save_out = "/datasets/tmp/mocap/{}_forecast_samples.json"
-# config = {
-#     # "item_step": 2,
-#     "item_step": 3,
-#     "window_step": 2,
-#     # "input_n": 30,
-#     # "output_n": 15,
-#     # "input_n": 20,
-#     # "output_n": 10,
-#     "input_n": 60,
-#     "output_n": 30,
-#     "select_joints": [
-#         "hip_middle",
-#         # "spine_lower",
-#         "hip_right",
-#         "knee_right",
-#         "ankle_right",
-#         # "middlefoot_right",
-#         # "forefoot_right",
-#         "hip_left",
-#         "knee_left",
-#         "ankle_left",
-#         # "middlefoot_left",
-#         # "forefoot_left",
-#         # "spine2",
-#         # "spine3",
-#         # "spine_upper",
-#         # "neck",
-#         # "head_lower",
-#         "head_upper",
-#         "shoulder_right",
-#         "elbow_right",
-#         "wrist_right",
-#         # "hand_right1",
-#         # "hand_right2",
-#         # "hand_right3",
-#         # "hand_right4",
-#         "shoulder_left",
-#         "elbow_left",
-#         "wrist_left",
-#         # "hand_left1",
-#         # "hand_left2",
-#         # "hand_left3",
-#         # "hand_left4"
-#         "shoulder_middle",
-#     ],
-# }
+# datasets_train = [
+#     "/datasets/preprocessed/mocap/train_forecast_samples_4fps.json",
+#     "/datasets/preprocessed/amass/bmlmovi_train_forecast_samples_4fps.json",
+#     "/datasets/preprocessed/amass/bmlrub_train_forecast_samples_4fps.json",
+#     "/datasets/preprocessed/amass/kit_train_forecast_samples_4fps.json"
+# ]
+
+datasets_train = [
+    "/datasets/preprocessed/human36m/train_forecast_kppspose_10fps.json",
+    # "/datasets/preprocessed/human36m/train_forecast_kppspose_4fps.json",
+]
+
+# datasets_train = [
+#     "/datasets/preprocessed/mocap/train_forecast_samples_10fps.json",
+#     "/datasets/preprocessed/amass/bmlmovi_train_forecast_samples_10fps.json",
+#     "/datasets/preprocessed/amass/bmlrub_train_forecast_samples_10fps.json",
+#     "/datasets/preprocessed/amass/kit_train_forecast_samples_10fps.json"
+# ]
+
+dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose_10fps.json"
+# dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose_4fps.json"
+# dataset_eval_test = "/datasets/preprocessed/mocap/{}_forecast_samples_10fps.json"
+# dataset_eval_test = "/datasets/preprocessed/mocap/{}_forecast_samples_4fps.json"
 
 
 # ==================================================================================================
@@ -151,6 +109,9 @@ def run_train(model, model_path, args):
     device = args.dev
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-05)
 
+    config["input_n"] = args.input_n
+    config["output_n"] = args.output_n
+
     if args.use_scheduler:
         scheduler = optim.lr_scheduler.MultiStepLR(
             optimizer, milestones=args.milestones, gamma=args.gamma
@@ -158,15 +119,26 @@ def run_train(model, model_path, args):
 
     # Load preprocessed datasets
     print("Loading datasets ...")
-    dataset_train, dlen_train = utils_pipeline.load_dataset(
-        datapath_save_out, "train", config
-    )
-    esplit = "test" if "mocap" in datapath_save_out else "eval"
-    dataset_eval, dlen_eval = utils_pipeline.load_dataset(
-        datapath_save_out, esplit, config
-    )
+    dataset_train, dlen_train = [], 0
+    for dp in datasets_train:
+        cfg = copy.deepcopy(config)
+        if "mocap" in dp:
+            cfg["select_joints"][cfg["select_joints"].index("nose")] = "head_upper"
 
-    train_loss, val_loss, test_loss = [], [], []
+        ds, dlen = utils_pipeline.load_dataset(dp, "train", cfg)
+        dataset_train.extend(ds["sequences"])
+        dlen_train += dlen
+
+    esplit = "test" if "mocap" in dataset_eval_test else "eval"
+    cfg = copy.deepcopy(config)
+    if "mocap" in dataset_eval_test:
+        cfg["select_joints"][cfg["select_joints"].index("nose")] = "head_upper"
+    dataset_eval, dlen_eval = utils_pipeline.load_dataset(
+        dataset_eval_test, esplit, cfg
+    )
+    dataset_eval = dataset_eval["sequences"]
+
+    train_loss, val_loss = [], []
     best_loss = np.inf
 
     for epoch in range(args.n_epochs):
