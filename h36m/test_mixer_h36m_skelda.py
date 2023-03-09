@@ -181,10 +181,6 @@ def run_test(model, args):
             )
             sequences_gt = prepare_sequences(batch, nbatch, "target", device, datamode)
 
-            # Use this to calculate input pose errors
-            # sequences_predict = prepare_sequences(batch, nbatch, "input", device, "pred-pred")
-            # sequences_gt = prepare_sequences(batch, nbatch, "input", device, "gt-gt")
-
             if args.delta_x:
                 sequences_train_delta = calc_delta(sequences_train, sequences_gt, args)
                 sequences_predict = model(sequences_train_delta)
@@ -194,6 +190,28 @@ def run_test(model, args):
 
             else:
                 sequences_predict = model(sequences_train)
+
+            # # Uncomment this to calculate input pose errors
+            # sequences_predict = prepare_sequences(
+            #     batch, nbatch, "input", device, "pred-pred"
+            # )
+            # sequences_gt = prepare_sequences(batch, nbatch, "input", device, "gt-gt")
+            # sequences_predict = sequences_predict.reshape(
+            #     nbatch, -1, args.pose_dim // 3, 3
+            # )
+            # sequences_gt = sequences_gt.reshape(nbatch, -1, args.pose_dim // 3, 3)
+            # last_input_pose_gt = batch[0]["input"][-1]["bodies3D"][0]
+            # last_input_pose_pred = batch[0]["input"][-1]["predictions"][0]
+            # sequences_predict = sequences_predict.cpu().data.numpy()
+            # sequences_gt = sequences_gt.cpu().data.numpy()
+            # sequences_predict = utils_pipeline.make_absolute_with_last_input(
+            #     sequences_predict, last_input_pose_pred
+            # )
+            # sequences_gt = utils_pipeline.make_absolute_with_last_input(
+            #     sequences_gt, last_input_pose_gt
+            # )
+            # sequences_predict = torch.from_numpy(sequences_predict).float().to(device)
+            # sequences_gt = torch.from_numpy(sequences_gt).float().to(device)
 
             # # Uncomment this to run a test which only predicts the last known timestep
             # sequences_train_delta = calc_delta(sequences_train, sequences_gt, args)
