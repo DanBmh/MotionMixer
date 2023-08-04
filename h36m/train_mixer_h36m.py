@@ -27,7 +27,7 @@ def get_log_dir(out_dir):
     return log_dir
 
 
-def train(model, model_name, args):
+def train(model, model_path, args):
 
     log_dir = get_log_dir(args.root)
     tb_writer = SummaryWriter(log_dir=log_dir)
@@ -200,6 +200,7 @@ def train(model, model_name, args):
         pin_memory=True,
     )
 
+    best_loss = np.inf
     for epoch in range(args.n_epochs):
         print("Run epoch: %i" % epoch)
         running_loss = 0
@@ -330,6 +331,7 @@ def train(model, model_name, args):
 
                 running_loss += loss * batch_dim
             val_loss.append(running_loss.detach().cpu() / n)
+
         if args.use_scheduler:
             scheduler.step()
 
@@ -343,10 +345,11 @@ def train(model, model_name, args):
         tb_writer.add_scalar("loss/test", test_loss[-1].item(), epoch)
 
         torch.save(model.state_dict(), os.path.join(log_dir, "model.pt"))
-        # TODO write something to save the best model
-        if (epoch + 1) % 1 == 0:
-            print("----saving model-----")
-            torch.save(model.state_dict(), os.path.join(args.model_path, model_name))
+        if val_loss[-1].item() < best_loss:
+            best_loss = val_loss[-1].item()
+            print("New best validation loss: %f" % best_loss)
+            print("Saving best model...")
+            torch.save(model.state_dict(), model_path)
 
 
 def test_mpjpe(model, args):
@@ -857,7 +860,5 @@ if __name__ == "__main__":
         + str(sum(p.numel() for p in model.parameters() if p.requires_grad))
     )
 
-    model_name = "h36_3d_" + str(args.output_n) + "frames_ckpt"
-
-    train(model, model_name, args)
+    train(model, args.model_path, args)
     test_mpjpe(model, args)

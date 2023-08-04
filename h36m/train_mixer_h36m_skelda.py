@@ -11,17 +11,19 @@ import tqdm
 from mlp_mixer import MlpMixer
 from torch.utils.tensorboard import SummaryWriter
 
-from utils.utils_mixer import delta_2_gt, mpjpe_error
+from utils.utils_mixer import mpjpe_error
 
 sys.path.append("/PoseForecaster/")
 import utils_pipeline
 
 # ==================================================================================================
 
-datamode = "gt-gt"
-# datamode = "pred-pred"
+# datamode = "gt-gt"
+datamode = "pred-pred"
 
 config = {
+    # "item_step": 2,
+    # "window_step": 2,
     "item_step": 1,
     "window_step": 1,
     "select_joints": [
@@ -53,6 +55,7 @@ config = {
 datasets_train = [
     "/datasets/preprocessed/human36m/train_forecast_kppspose_10fps.json",
     # "/datasets/preprocessed/human36m/train_forecast_kppspose_4fps.json",
+    # "/datasets/preprocessed/human36m/train_forecast_kppspose.json",
 ]
 
 # datasets_train = [
@@ -64,6 +67,7 @@ datasets_train = [
 
 dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose_10fps.json"
 # dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose_4fps.json"
+# dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose.json"
 # dataset_eval_test = "/datasets/preprocessed/mocap/{}_forecast_samples_10fps.json"
 # dataset_eval_test = "/datasets/preprocessed/mocap/{}_forecast_samples_4fps.json"
 
@@ -100,8 +104,21 @@ def calc_delta(sequences_train, sequences_gt, args):
 # ==================================================================================================
 
 
-def run_train(model, model_path, args):
+def delta_2_gt(prediction, last_timestep):
+    prediction = prediction.clone()
 
+    # print (prediction [:,0,:].shape,last_timestep.shape)
+    prediction[:, 0, :] = prediction[:, 0, :] + last_timestep
+    for i in range(prediction.shape[1] - 1):
+        prediction[:, i + 1, :] = prediction[:, i + 1, :] + prediction[:, i, :]
+
+    return prediction
+
+
+# ==================================================================================================
+
+
+def run_train(model, model_path, args):
     log_dir = get_log_dir(args.root)
     tb_writer = SummaryWriter(log_dir=log_dir)
     print("Save data of the run in: %s" % log_dir)
@@ -154,7 +171,6 @@ def run_train(model, model_path, args):
             utils_pipeline.batch_iterate(label_gen_train, batch_size=nbatch),
             total=int(dlen_train / nbatch),
         ):
-
             sequences_train = utils_pipeline.make_input_sequence(
                 batch, "input", datamode
             )
@@ -165,6 +181,13 @@ def run_train(model, model_path, args):
                 sequences_train, sequences_gt = utils_pipeline.apply_augmentations(
                     sequences_train, sequences_gt
                 )
+
+            # # Test numpy delta calculation
+            # sequences_train_delta = utils_pipeline.calc_delta(sequences_train)
+            # sequences_train_delta = sequences_train_delta.reshape(
+            #     [nbatch, sequences_train_delta.shape[1], -1]
+            # )
+            # sequences_train_delta = torch.from_numpy(sequences_train_delta).to(device)
 
             # Merge joints and coordinates to a single dimension
             sequences_train = sequences_train.reshape(
@@ -220,7 +243,6 @@ def run_train(model, model_path, args):
 
 
 def run_eval(model, dataset_gen_eval, dlen_eval, args):
-
     device = args.dev
     model.eval()
 
@@ -232,7 +254,6 @@ def run_eval(model, dataset_gen_eval, dlen_eval, args):
             utils_pipeline.batch_iterate(dataset_gen_eval, batch_size=nbatch),
             total=int(dlen_eval / nbatch),
         ):
-
             sequences_train = utils_pipeline.make_input_sequence(
                 batch, "input", datamode
             )

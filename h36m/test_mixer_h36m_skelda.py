@@ -17,6 +17,8 @@ import utils_pipeline
 # ==================================================================================================
 
 datamode = "pred-gt"
+# datamode = "pred-pred"
+# datamode = "gt-gt"
 jloss_timestep = 0
 
 config = {
@@ -146,7 +148,6 @@ def viz_joints_3d(sequences_predict, batch):
 
 
 def run_test(model, args):
-
     device = args.dev
     model.eval()
 
@@ -172,7 +173,6 @@ def run_test(model, args):
         nbatch = 1
 
         for batch in tqdm.tqdm(label_gen_test, total=dlen):
-
             if nbatch == 1:
                 batch = [batch]
 
