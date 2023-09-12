@@ -11,7 +11,7 @@ from mlp_mixer import MlpMixer
 
 from utils.utils_mixer import delta_2_gt
 
-sys.path.append("/PoseForecaster/")
+sys.path.append("/PoseForecasters/")
 import utils_pipeline
 
 # ==================================================================================================

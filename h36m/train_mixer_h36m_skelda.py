@@ -13,7 +13,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from utils.utils_mixer import mpjpe_error
 
-sys.path.append("/PoseForecaster/")
+sys.path.append("/PoseForecasters/")
 import utils_pipeline
 
 # ==================================================================================================
