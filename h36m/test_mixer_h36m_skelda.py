@@ -16,16 +16,17 @@ import utils_pipeline
 
 # ==================================================================================================
 
-datamode = "pred-gt"
+datamode = "gt-gt"
+# datamode = "pred-gt"
 # datamode = "pred-pred"
-# datamode = "gt-gt"
 jloss_timestep = 0
 
 config = {
-    "item_step": 1,
-    # "item_step": 2,
-    "window_step": 1,
-    # "window_step": 40,
+    "item_step": 2,
+    "window_step": 2,
+    # "item_step": 1,
+    # "window_step": 1,
+
     "select_joints": [
         "hip_middle",
         "hip_right",
@@ -45,8 +46,8 @@ config = {
     ],
 }
 
-dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose_10fps.json"
-# dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose.json"
+dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose.json"
+# dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose_10fps.json"
 # dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose_4fps.json"
 # dataset_eval_test = "/datasets/preprocessed/mocap/{}_forecast_samples_10fps.json"
 # dataset_eval_test = "/datasets/preprocessed/mocap/{}_forecast_samples_4fps.json"
@@ -349,18 +350,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--loss_type", type=str, default="mpjpe", choices=["mpjpe", "angle"]
     )
-    parser.add_argument("--hidden_dim", default=512, type=int, required=False)
-    parser.add_argument("--num_blocks", default=8, type=int, required=False)
-    parser.add_argument("--tokens_mlp_dim", default=512, type=int, required=False)
-    parser.add_argument("--channels_mlp_dim", default=512, type=int, required=False)
-    # parser.add_argument("--hidden_dim", default=100, type=int, required=False)
-    # parser.add_argument("--num_blocks", default=6, type=int, required=False)
-    # parser.add_argument("--tokens_mlp_dim", default=100, type=int, required=False)
-    # parser.add_argument("--channels_mlp_dim", default=100, type=int, required=False)
-    # parser.add_argument("--hidden_dim", default=50, type=int, required=False)
-    # parser.add_argument("--num_blocks", default=4, type=int, required=False)
-    # parser.add_argument("--tokens_mlp_dim", default=20, type=int, required=False)
-    # parser.add_argument("--channels_mlp_dim", default=50, type=int, required=False)
+    parser.add_argument("--hidden_dim", default=50, type=int, required=False)
+    parser.add_argument("--num_blocks", default=4, type=int, required=False)
+    parser.add_argument("--tokens_mlp_dim", default=20, type=int, required=False)
+    parser.add_argument("--channels_mlp_dim", default=50, type=int, required=False)
     parser.add_argument("--regularization", default=0.1, type=float, required=False)
     parser.add_argument("--pose_dim", default=45, type=int, required=False)
     parser.add_argument(

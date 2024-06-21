@@ -18,14 +18,14 @@ import utils_pipeline
 
 # ==================================================================================================
 
-# datamode = "gt-gt"
-datamode = "pred-pred"
+datamode = "gt-gt"
+# datamode = "pred-pred"
 
 config = {
-    # "item_step": 2,
-    # "window_step": 2,
-    "item_step": 1,
-    "window_step": 1,
+    "item_step": 2,
+    "window_step": 2,
+    # "item_step": 1,
+    # "window_step": 1,
     "select_joints": [
         "hip_middle",
         "hip_right",
@@ -53,9 +53,9 @@ config = {
 # ]
 
 datasets_train = [
-    "/datasets/preprocessed/human36m/train_forecast_kppspose_10fps.json",
+    "/datasets/preprocessed/human36m/train_forecast_kppspose.json",
+    # "/datasets/preprocessed/human36m/train_forecast_kppspose_10fps.json",
     # "/datasets/preprocessed/human36m/train_forecast_kppspose_4fps.json",
-    # "/datasets/preprocessed/human36m/train_forecast_kppspose.json",
 ]
 
 # datasets_train = [
@@ -65,9 +65,9 @@ datasets_train = [
 #     "/datasets/preprocessed/amass/kit_train_forecast_samples_10fps.json"
 # ]
 
-dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose_10fps.json"
+dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose.json"
+# dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose_10fps.json"
 # dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose_4fps.json"
-# dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose.json"
 # dataset_eval_test = "/datasets/preprocessed/mocap/{}_forecast_samples_10fps.json"
 # dataset_eval_test = "/datasets/preprocessed/mocap/{}_forecast_samples_4fps.json"
 
@@ -382,18 +382,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--loss_type", type=str, default="mpjpe", choices=["mpjpe", "angle"]
     )
-    parser.add_argument("--hidden_dim", default=512, type=int, required=False)
-    parser.add_argument("--num_blocks", default=8, type=int, required=False)
-    parser.add_argument("--tokens_mlp_dim", default=512, type=int, required=False)
-    parser.add_argument("--channels_mlp_dim", default=512, type=int, required=False)
-    # parser.add_argument("--hidden_dim", default=100, type=int, required=False)
-    # parser.add_argument("--num_blocks", default=6, type=int, required=False)
-    # parser.add_argument("--tokens_mlp_dim", default=100, type=int, required=False)
-    # parser.add_argument("--channels_mlp_dim", default=100, type=int, required=False)
-    # parser.add_argument("--hidden_dim", default=50, type=int, required=False)
-    # parser.add_argument("--num_blocks", default=4, type=int, required=False)
-    # parser.add_argument("--tokens_mlp_dim", default=20, type=int, required=False)
-    # parser.add_argument("--channels_mlp_dim", default=50, type=int, required=False)
+    parser.add_argument("--hidden_dim", default=50, type=int, required=False)
+    parser.add_argument("--num_blocks", default=4, type=int, required=False)
+    parser.add_argument("--tokens_mlp_dim", default=20, type=int, required=False)
+    parser.add_argument("--channels_mlp_dim", default=50, type=int, required=False)
     parser.add_argument("--regularization", default=0.1, type=float, required=False)
     parser.add_argument("--pose_dim", default=45, type=int, required=False)
     parser.add_argument(
@@ -426,6 +418,10 @@ if __name__ == "__main__":
     )
 
     model = model.to(args.dev)
+
+    # from torchsummary import summary
+    # summary(model, (20, 45))
+
     print(
         "total number of parameters of the network is: "
         + str(sum(p.numel() for p in model.parameters() if p.requires_grad))
