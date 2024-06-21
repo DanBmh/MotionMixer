@@ -1,4 +1,5 @@
 import argparse
+import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -9,6 +10,123 @@ from torch.utils.data import DataLoader
 
 from utils.data_utils import define_actions
 from utils.utils_mixer import delta_2_gt, mpjpe_error
+
+sys.path.append("/PoseForecasters/")
+import utils_pipeline
+
+# ==================================================================================================
+
+
+# joint_to_ignore = np.array([16, 20, 23, 24, 28, 31])
+# joint_equal = np.array([13, 19, 22, 13, 27, 30])
+joint_used = [
+    2,
+    3,
+    4,
+    5,
+    7,
+    8,
+    9,
+    10,
+    12,
+    13,
+    14,
+    15,
+    17,
+    18,
+    19,
+    21,
+    22,
+    25,
+    26,
+    27,
+    29,
+    30,
+]
+joint_names = {
+    0: "Hips->hip_middle",
+    1: "RightUpLeg->hip_right",
+    2: "RightLeg->knee_right",
+    3: "RightFoot->ankle_right",
+    4: "RightToeBase->middlefoot_right",
+    5: "Site->forefoot_right",
+    6: "LeftUpLeg->hip_left",
+    7: "LeftLeg->knee_left",
+    8: "LeftFoot->ankle_left",
+    9: "LeftToeBase->middlefoot_left",
+    10: "Site->forefoot_left",
+    11: "Spine->spine_lower-site",
+    12: "Spine1->spine_upper",
+    13: "Neck",  # equal
+    14: "Head->nose",
+    15: "Site->head",
+    16: "LeftShoulder->neck-site",  # ignore
+    17: "LeftArm->shoulder_left",
+    18: "LeftForeArm->elbow_left",
+    19: "LeftHand->wrist_left",  # equal
+    20: "LeftHandThumb->wrist_left-site",  # ignore
+    21: "Site->thumb_left",
+    22: "L_Wrist_End->hand_left",  # equal
+    23: "Site->hand_left-site",  # ignore
+    24: "RightShoulder->neck-site",  # ignore
+    25: "RightArm->shoulder_right",
+    26: "RightForeArm->elbow_right",
+    27: "RightHand->wrist_right",  # equal
+    28: "RightHandThumb->wrist_right-site",  # ignore
+    29: "Site->thumb_right",
+    30: "R_Wrist_End->hand_right",  # equal
+    31: "Site->hand_right-site",  # ignore
+}
+joint_names = [v.lower() for v in joint_names.values()]
+room_dict = {"room_size": [4800, 6000, 2000], "room_center": [0, 0, 1000]}
+
+
+def viz_joints_3d(sequences_train, sequences_gt, sequences_predict):
+
+    sequences_train = sequences_train.cpu().detach().numpy()
+    sequences_gt = sequences_gt.cpu().detach().numpy()
+    sequences_predict = sequences_predict.cpu().detach().numpy()
+
+    sequences_train = sequences_train.reshape(
+        sequences_train.shape[0], sequences_train.shape[1], -1, 3
+    )
+    sequences_gt = sequences_gt.reshape(
+        sequences_gt.shape[0], sequences_gt.shape[1], -1, 3
+    )
+    sequences_predict = sequences_predict.reshape(
+        sequences_predict.shape[0], sequences_predict.shape[1], -1, 3
+    )
+    print(sequences_train.shape, sequences_gt.shape, sequences_predict.shape)
+
+    # hip-joints don't get predicted, but taken directly from ground truth,
+    # therefore they are not visible here
+
+    # Take first sample from each sequence
+    sequences_train = sequences_train[0]
+    sequences_gt = sequences_gt[0]
+    sequences_predict = sequences_predict[0]
+
+    # Rotate axes and lift to room center
+    M = np.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, 1.0, 0.0]])
+    sequences_train = np.dot(sequences_train, M)
+    sequences_train[..., 2] += room_dict["room_center"][2]
+    sequences_gt = np.dot(sequences_gt, M)
+    sequences_gt[..., 2] += room_dict["room_center"][2]
+    sequences_predict = np.dot(sequences_predict, M)
+    sequences_predict[..., 2] += room_dict["room_center"][2]
+
+    utils_pipeline.visualize_pose_trajectories(
+        sequences_train,
+        # sequences_gt,
+        np.array([]),
+        sequences_predict,
+        [j for i, j in enumerate(joint_names) if i in joint_used],
+        {},
+    )
+    plt.show()
+
+
+# ==================================================================================================
 
 
 def test_pretrained(model, args):
@@ -164,6 +282,8 @@ def test_pretrained(model, args):
                 else:
                     sequences_predict = model(sequences_train)
                     loss = mpjpe_error(sequences_predict, sequences_gt)
+
+                # viz_joints_3d(sequences_train, sequences_gt, sequences_predict)
 
                 all_joints_seq[:, :, dim_used] = sequences_predict
                 all_joints_seq[:, :, index_to_ignore] = all_joints_seq[
