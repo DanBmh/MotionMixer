@@ -13,10 +13,10 @@ from torch.utils.tensorboard import SummaryWriter
 
 from utils.utils_mixer import mpjpe_error
 
+# ==================================================================================================
+
 sys.path.append("/PoseForecasters/")
 import utils_pipeline
-
-# ==================================================================================================
 
 datamode = "gt-gt"
 # datamode = "pred-pred"
@@ -27,50 +27,27 @@ config = {
     # "item_step": 1,
     # "window_step": 1,
     "select_joints": [
-        "hip_middle",
         "hip_right",
-        "knee_right",
-        "ankle_right",
         "hip_left",
+        "knee_right",
         "knee_left",
+        "ankle_right",
         "ankle_left",
         "nose",
-        "shoulder_left",
-        "elbow_left",
-        "wrist_left",
         "shoulder_right",
+        "shoulder_left",
         "elbow_right",
+        "elbow_left",
         "wrist_right",
-        "shoulder_middle",
+        "wrist_left",
     ],
 }
 
-# datasets_train = [
-#     "/datasets/preprocessed/mocap/train_forecast_samples_4fps.json",
-#     "/datasets/preprocessed/amass/bmlmovi_train_forecast_samples_4fps.json",
-#     "/datasets/preprocessed/amass/bmlrub_train_forecast_samples_4fps.json",
-#     "/datasets/preprocessed/amass/kit_train_forecast_samples_4fps.json"
-# ]
-
 datasets_train = [
-    "/datasets/preprocessed/human36m/train_forecast_kppspose.json",
-    # "/datasets/preprocessed/human36m/train_forecast_kppspose_10fps.json",
-    # "/datasets/preprocessed/human36m/train_forecast_kppspose_4fps.json",
+    "/datasets/preprocessed/human36m/train_forecast_rpt.json",
 ]
 
-# datasets_train = [
-#     "/datasets/preprocessed/mocap/train_forecast_samples_10fps.json",
-#     "/datasets/preprocessed/amass/bmlmovi_train_forecast_samples_10fps.json",
-#     "/datasets/preprocessed/amass/bmlrub_train_forecast_samples_10fps.json",
-#     "/datasets/preprocessed/amass/kit_train_forecast_samples_10fps.json"
-# ]
-
-dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose.json"
-# dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose_10fps.json"
-# dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose_4fps.json"
-# dataset_eval_test = "/datasets/preprocessed/mocap/{}_forecast_samples_10fps.json"
-# dataset_eval_test = "/datasets/preprocessed/mocap/{}_forecast_samples_4fps.json"
-
+dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_rpt.json"
 
 # ==================================================================================================
 
@@ -189,6 +166,10 @@ def run_train(model, model_path, args):
             # )
             # sequences_train_delta = torch.from_numpy(sequences_train_delta).to(device)
 
+            # Convert to millimeters
+            sequences_train = sequences_train * 1000
+            sequences_gt = sequences_gt * 1000
+
             # Merge joints and coordinates to a single dimension
             sequences_train = sequences_train.reshape(
                 [nbatch, sequences_train.shape[1], -1]
@@ -259,6 +240,10 @@ def run_eval(model, dataset_gen_eval, dlen_eval, args):
             )
             sequences_gt = utils_pipeline.make_input_sequence(batch, "target", datamode)
 
+            # Convert to millimeters
+            sequences_train = sequences_train * 1000
+            sequences_gt = sequences_gt * 1000
+
             # Merge joints and coordinates to a single dimension
             sequences_train = sequences_train.reshape(
                 [nbatch, sequences_train.shape[1], -1]
@@ -282,7 +267,7 @@ def run_eval(model, dataset_gen_eval, dlen_eval, args):
             running_loss += loss * nbatch
 
         avg_loss = running_loss.detach().cpu() / (int(dlen_eval / nbatch) * nbatch)
-        print("overall average loss in mm is: {:.3f}".format(avg_loss))
+        print("overall average loss is: {:.3f}".format(avg_loss))
         return avg_loss
 
 

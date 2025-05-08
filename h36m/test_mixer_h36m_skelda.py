@@ -11,10 +11,10 @@ from mlp_mixer import MlpMixer
 
 from utils.utils_mixer import delta_2_gt
 
+# ==================================================================================================
+
 sys.path.append("/PoseForecasters/")
 import utils_pipeline
-
-# ==================================================================================================
 
 datamode = "gt-gt"
 # datamode = "pred-gt"
@@ -26,31 +26,24 @@ config = {
     "window_step": 2,
     # "item_step": 1,
     # "window_step": 1,
-
     "select_joints": [
-        "hip_middle",
         "hip_right",
-        "knee_right",
-        "ankle_right",
         "hip_left",
+        "knee_right",
         "knee_left",
+        "ankle_right",
         "ankle_left",
         "nose",
-        "shoulder_left",
-        "elbow_left",
-        "wrist_left",
         "shoulder_right",
+        "shoulder_left",
         "elbow_right",
+        "elbow_left",
         "wrist_right",
-        "shoulder_middle",
+        "wrist_left",
     ],
 }
 
-dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose.json"
-# dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose_10fps.json"
-# dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose_4fps.json"
-# dataset_eval_test = "/datasets/preprocessed/mocap/{}_forecast_samples_10fps.json"
-# dataset_eval_test = "/datasets/preprocessed/mocap/{}_forecast_samples_4fps.json"
+dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_rpt.json"
 dataset_eval_test = dataset_eval_test.format("test")
 
 viz_action = -1
@@ -59,18 +52,23 @@ viz_action = -1
 # ==================================================================================================
 
 
-def repeat_last_timestep(input_array, num_future_timesteps):
+def repeat_last_timestep(input_array, num_future_timesteps, mode: str):
     nbatch, _, human_joints, _ = input_array.shape
     future_timesteps = np.zeros((nbatch, num_future_timesteps, human_joints, 3))
 
-    # Average of deltas of last input
-    last_input = np.mean(np.mean(input_array[:, -1:], axis=1), axis=1)
-    last_input = np.repeat(np.expand_dims(last_input, axis=1), 15, axis=1)
-    # # Just last input
-    # last_input = input_array[:, -1, :, :]
-    # # Torso average delta
-    # last_input = np.mean(np.mean(input_array[:, -1:, [0,1,4,8,11,14], :], axis=1), axis=1)
-    # last_input = np.repeat(np.expand_dims(last_input, axis=1), 15, axis=1)
+    if mode == "delta":
+        # Average of deltas of last input
+        last_input = np.mean(np.mean(input_array[:, -1:], axis=1), axis=1)
+        last_input = np.repeat(np.expand_dims(last_input, axis=1), 15, axis=1)
+    elif mode == "last":
+        # Just last input
+        last_input = input_array[:, -1, :, :]
+    elif mode == "torso":
+        # Torso average delta
+        last_input = np.mean(
+            np.mean(input_array[:, -1:, [0, 1, 4, 8, 11, 14], :], axis=1), axis=1
+        )
+        last_input = np.repeat(np.expand_dims(last_input, axis=1), 15, axis=1)
 
     for i in range(nbatch):
         for j in range(human_joints):
@@ -101,10 +99,14 @@ def calc_delta(sequences_train, sequences_gt, args):
 
 
 def prepare_sequences(batch, batch_size: int, split: str, device, dmode):
+
     sequences = utils_pipeline.make_input_sequence(batch, split, dmode)
 
     # Merge joints and coordinates to a single dimension
     sequences = sequences.reshape([batch_size, sequences.shape[1], -1])
+
+    # Convert to millimeters
+    sequences = sequences * 1000
 
     sequences = torch.from_numpy(sequences).to(device)
 
@@ -218,15 +220,21 @@ def run_test(model, args):
             # sequences_predict = torch.from_numpy(sequences_predict).float().to(device)
             # sequences_gt = torch.from_numpy(sequences_gt).float().to(device)
 
-            # # Uncomment this to run a test which only predicts the last known timestep
+            # # Uncomment this to run a test which only predicts the last average delta
             # sequences_train_delta = calc_delta(sequences_train, sequences_gt, args)
             # seq_train_np = sequences_train_delta.cpu().data.numpy()
-            # # seq_train_np = sequences_train.cpu().data.numpy()
             # seq_train_np = seq_train_np.reshape(nbatch, -1, args.pose_dim // 3, 3)
-            # seq_pred_np = repeat_last_timestep(seq_train_np, args.output_n)
+            # seq_pred_np = repeat_last_timestep(seq_train_np, args.output_n, "delta")
             # seq_pred_np = seq_pred_np.reshape(nbatch, args.output_n, -1)
             # sequences_predict = torch.from_numpy(seq_pred_np).float().to(device)
             # sequences_predict = delta_2_gt(sequences_predict, sequences_train[:, -1, :])
+
+            # # Uncomment this to run a test which only predicts the last known timestep
+            # seq_train_np = sequences_train.cpu().data.numpy()
+            # seq_train_np = seq_train_np.reshape(nbatch, -1, args.pose_dim // 3, 3)
+            # seq_pred_np = repeat_last_timestep(seq_train_np, args.output_n, "last")
+            # seq_pred_np = seq_pred_np.reshape(nbatch, args.output_n, -1)
+            # sequences_predict = torch.from_numpy(seq_pred_np).float().to(device)
 
             if viz_action != -1:
                 viz_joints_3d(sequences_predict, batch)
