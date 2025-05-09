@@ -326,9 +326,27 @@ class MlpMixer(nn.Module):
         self.conv_out = nn.Conv1d(self.seq_len, self.pred_len, 1, stride=1)
 
     def forward(self, x):
+        # x = x.unsqueeze(1)
+        # y = self.conv(x)
+        # y = y.squeeze(dim=3).transpose(1, 2)
+
+        # Do the conv1d manually, because the newer pytorch version complains about the shapes
         x = x.unsqueeze(1)
-        y = self.conv(x)
-        y = y.squeeze(dim=3).transpose(1, 2)
+        w2 = self.conv.weight
+        b  = self.conv.bias
+        stride   = (self.conv.stride[0],   1)
+        padding  = (self.conv.padding[0],  0)
+        dilation = (self.conv.dilation[0], 1)
+        y = F.conv2d(
+            x, 
+            w2, 
+            b,
+            stride=stride,
+            padding=padding,
+            dilation=dilation,
+            groups=self.conv.groups
+        )
+        y = y.squeeze(3).transpose(1, 2)
 
         # [256, 8, 512] [bs, patches/time_steps, channels]
         for mb in self.Mixer_Block:
