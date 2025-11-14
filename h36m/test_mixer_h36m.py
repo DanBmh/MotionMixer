@@ -216,6 +216,55 @@ def test_pretrained(model, args):
         (joint_equal * 3, joint_equal * 3 + 1, joint_equal * 3 + 2)
     )
 
+    # # Uncomment for sklearn baseline experiment
+    # dataset_train = H36M_Dataset(
+    #     args.data_dir,
+    #     args.input_n,
+    #     args.output_n,
+    #     args.skip_rate,
+    #     split=0,
+    # )
+    # train_loader = DataLoader(
+    #     dataset_train,
+    #     batch_size=args.batch_size_test,
+    #     shuffle=False,
+    #     num_workers=0,
+    #     pin_memory=True,
+    # )
+    # X_list = []
+    # Y_list = []
+    # print("Loading training data...")
+    # for _, batch in enumerate(train_loader):
+    #     batch = batch.to(args.device)
+    #     batch_dim = batch.shape[0]
+    #     all_joints_seq = batch.clone()[
+    #         :, args.input_n : args.input_n + args.output_n, :
+    #     ]
+    #     all_joints_seq_gt = batch.clone()[
+    #         :, args.input_n : args.input_n + args.output_n, :
+    #     ]
+    #     sequences_train = batch[:, 0 : args.input_n, dim_used].view(
+    #         -1, args.input_n, len(dim_used)
+    #     )
+    #     sequences_gt = batch[
+    #         :, args.input_n : args.input_n + args.output_n, dim_used
+    #     ].view(-1, args.output_n, args.pose_dim)
+    #     X_flat = sequences_train.cpu().data.numpy().reshape(batch_dim, -1)
+    #     Y_flat = sequences_gt.cpu().data.numpy().reshape(batch_dim, -1)
+    #     X_list.append(X_flat.astype(np.float32, copy=False))
+    #     Y_list.append(Y_flat.astype(np.float32, copy=False))
+    # X_train = np.concatenate(X_list, axis=0)
+    # Y_train = np.concatenate(Y_list, axis=0)
+    # from sklearn.linear_model import Ridge
+    # from sklearn.preprocessing import StandardScaler
+    # from sklearn.pipeline import make_pipeline
+    # print("Training sklearn ...")
+    # skm = make_pipeline(
+    #     StandardScaler(),
+    #     Ridge(),
+    # )
+    # skm.fit(X_train, Y_train)
+
     for action in actions:
         n = 0
         t_3d = np.zeros([args.output_n])
@@ -282,6 +331,34 @@ def test_pretrained(model, args):
                 else:
                     sequences_predict = model(sequences_train)
                     loss = mpjpe_error(sequences_predict, sequences_gt)
+
+                # # Uncomment this to run a test which only predicts the last known timestep
+                # def repeat_last_timestep(input_array, num_future_timesteps, mode: str):
+                #     nbatch, _, human_joints, _ = input_array.shape
+                #     future_timesteps = np.zeros((nbatch, num_future_timesteps, human_joints, 3))
+                #     if mode == "last":
+                #         last_input = input_array[:, -1, :, :]
+                #     for i in range(nbatch):
+                #         for j in range(human_joints):
+                #             for coord in range(3):
+                #                 future_timesteps[i, :, j, coord] = (
+                #                     np.ones(num_future_timesteps) * last_input[i, j, coord]
+                #                 )
+                #     return future_timesteps
+                # nbatch = batch_dim
+                # seq_train_np = sequences_train.cpu().data.numpy()
+                # seq_train_np = seq_train_np.reshape(nbatch, -1, args.pose_dim // 3, 3)
+                # seq_pred_np = repeat_last_timestep(seq_train_np, args.output_n, "last")
+                # seq_pred_np = seq_pred_np.reshape(nbatch, args.output_n, -1)
+                # sequences_predict = torch.from_numpy(seq_pred_np).float().to(args.device)
+
+                # # Uncomment this to run a test which uses the sklearn model
+                # nbatch = batch_dim
+                # seq_train_np = sequences_train.cpu().data.numpy()
+                # X_test = seq_train_np.reshape(nbatch, -1)
+                # Y_test_pred = skm.predict(X_test)
+                # seq_pred_np = Y_test_pred.reshape(nbatch, args.output_n, -1)
+                # sequences_predict = torch.from_numpy(seq_pred_np).float().to(args.device)
 
                 # viz_joints_3d(sequences_train, sequences_gt, sequences_predict)
 
